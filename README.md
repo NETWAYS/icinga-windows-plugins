@@ -6,6 +6,8 @@ PowerShell plugins for Icinga Monitoring on Windows
 This is likely a temporary implementation. Most checks will be implemented in a general PowerShell module for Windows:
 https://github.com/LordHepipud/icinga-module-windows
 
+See [icinga2-commands.conf](icinga2-commands.conf) for Icinga 2 CheckCommands.
+
 ### Check-Printer-Status
 
 ```

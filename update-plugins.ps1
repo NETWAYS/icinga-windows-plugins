@@ -77,7 +77,6 @@ function Write-Check-Certificates() {
         $Framework + '\lib\icinga\plugin\New-IcingaCheckResult.psm1'
         $Framework + '\lib\icinga\plugin\Write-IcingaPluginOutput.psm1'
         $Plugins + '\provider\certificate\Icinga_ProviderCertificate.psm1'
-        $Plugins + '\provider\directory\Icinga_Provider_Directory.psm1'
     )
 
     $comment, $params, $body = Read-Plugin-Parts -Source $source

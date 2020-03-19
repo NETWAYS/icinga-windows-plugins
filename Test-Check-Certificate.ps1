@@ -13,6 +13,6 @@ Write-Host "Status: ${rc}"
 Write-Host
 
 Write-Host 'Testing for errors'
-.\Check-Certificate.ps1 -CertPath C:\ProgramData\icinga2\var\lib\icinga2\certs -CertName ca.crt,'*.key','*.xxx' -CriticalStart 2019-03-01
+$rc = .\Check-Certificate.ps1 -CertPath C:\ProgramData\icinga2\var\lib\icinga2\certs -CertName ca.crt,'*.key','*.xxx' -CriticalStart 2019-03-01
 Write-Host "Status: ${rc}"
 Write-Host

@@ -82,9 +82,20 @@ function Write-Check-Certificates() {
 
     $comment, $params, $body = Read-Plugin-Parts -Source $source
 
-    $notice = '<# Assembled plugin based on Invoke-IcingaCheckCertificate from https://github.com/Icinga/icinga-powershell-plugins #>' + $NEWLINE + $NEWLINE
+    $FrameworkVersion = git --git-dir "${Framework}\.git" describe --tags
+    $PluginVersion = git --git-dir "${Plugins}\.git" describe --tags
 
-    $content = $comment + $NEWLINE + $notice + $params + $NEWLINE
+    $notice = @(
+        '<#'
+        'Assembled plugin based on Invoke-IcingaCheckCertificate from'
+        'https://github.com/Icinga/icinga-powershell-plugins'
+        ''
+        "icinga-powershell-framework: ${FrameworkVersion}"
+        "icinga-powershell-plugins: ${PluginVersion}"
+        '#>'
+    )
+
+    $content = $comment + $NEWLINE + ($notice -join $NEWLINE) + $NEWLINE + $NEWLINE + $params + $NEWLINE
 
     $content += '# Tell the script the daemon is not running' + $NEWLINE
     $content += '$global:IcingaDaemonData = @{ FrameworkRunningAsDaemon = $FALSE }' + $NEWLINE + $NEWLINE

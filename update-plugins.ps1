@@ -155,4 +155,29 @@ function Write-Check-Certificates() {
     $content | Out-File "Check-Certificate.ps1"
 }
 
+function Write-Check-UNCPath() {
+    $deps = @(
+        'framework:\lib\core\tools\New-StringTree.psm1'
+        'framework:\lib\core\tools\Format-IcingaPerfDataLabel.psm1'
+        'framework:\lib\core\tools\Format-IcingaPerfDataValue.psm1'
+        'framework:\lib\core\tools\Convert-IcingaPluginThresholds.psm1'
+        'framework:\lib\core\tools\Test-Numeric.psm1'
+        'framework:\lib\core\tools\ConvertTo-Integer.psm1'
+        'framework:\lib\core\cache\Get-IcingaCacheData.psm1'
+        'framework:\lib\icinga\enums\Icinga_IcingaEnums.psm1'
+        'framework:\lib\icinga\plugin\New-IcingaCheckPackage.psm1'
+        'framework:\lib\icinga\plugin\New-IcingaCheck.psm1'
+        'framework:\lib\icinga\plugin\New-IcingaCheckResult.psm1'
+        'framework:\lib\icinga\plugin\New-IcingaPerformanceDataEntry.psm1'
+        'framework:\lib\icinga\plugin\Write-IcingaPluginOutput.psm1'
+        'framework:\lib\icinga\plugin\Write-IcingaPluginPerfData.psm1'
+        'plugins:\provider\certificate\Icinga_ProviderCertificate.psm1'
+    )
+
+    $content = Get-AssembledPlugin -Source 'plugins\Invoke-IcingaCheckUNCPath.psm1' -Dependencies $deps
+
+    $content | Out-File "Check-UNCPath.ps1"
+}
+
 Write-Check-Certificates
+Write-Check-UNCPath

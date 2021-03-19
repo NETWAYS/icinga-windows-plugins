@@ -1,8 +1,5 @@
-param(
-    $ModulePath = 'C:\Program Files\WindowsPowershell\Modules',
-    $Framework = "${ModulePath}\icinga-powershell-framework",
-    $Plugins = "${ModulePath}\icinga-powershell-plugins"
-)
+$Framework = "icinga-powershell-framework"
+$Plugins = "icinga-powershell-plugins"
 
 # Make sure we are were this script lies
 Set-Location $PSScriptRoot
@@ -31,7 +28,7 @@ function Read-Plugin-Parts()
                 continue
             } elseif ($line -ne '') {
                 throw ("Invalid line: " + $line.Substring(0, 15))
-            }   
+            }
         }
 
         if ($inComment) {
@@ -62,31 +59,51 @@ function Read-Plugin-Parts()
     return $comment, $params, $body
 }
 
-function Write-Check-Certificates() {
-    $plugin = 'plugins\Invoke-IcingaCheckCertificate.psm1'
-    $source = Get-Content "${plugins}\${plugin}"
-
-    $files = @(
-        $Framework + '\lib\core\tools\New-StringTree.psm1'
-        $Framework + '\lib\core\tools\Format-IcingaPerfDataValue.psm1'
-        $Framework + '\lib\core\tools\Test-Numeric.psm1'
-        $Framework + '\lib\core\tools\ConvertTo-Seconds.psm1'
-        $Framework + '\lib\icinga\enums\Icinga_IcingaEnums.psm1'
-        $Framework + '\lib\icinga\plugin\New-IcingaCheck.psm1'
-        $Framework + '\lib\icinga\plugin\New-IcingaCheckPackage.psm1'
-        $Framework + '\lib\icinga\plugin\New-IcingaCheckResult.psm1'
-        $Framework + '\lib\icinga\plugin\Write-IcingaPluginOutput.psm1'
-        $Plugins + '\provider\certificate\Icinga_ProviderCertificate.psm1'
+function Find-PSModule() {
+    param(
+        [string]$Name
     )
 
-    $comment, $params, $body = Read-Plugin-Parts -Source $source
+    $Path = $null
 
-    $FrameworkVersion = git --git-dir "${Framework}\.git" describe --tags
-    $PluginVersion = git --git-dir "${Plugins}\.git" describe --tags
+    foreach ($p in ($env:PSModulePath -Split ';')) {
+        if (Test-Path "${p}\${Name}") {
+            $Path = "${p}\${Name}"
+            break
+        }
+    }
+
+    if ($null -eq $Path) {
+        throw "Could not find module ${Name} in PSModulePath"
+    }
+
+    if (Test-Path "${Path}\.git") {
+        return $Path, (git --git-dir "${Path}\.git" describe --tags)
+    } else {
+        # Find the newest version of a subdir
+        $versions = [array](Get-ChildItem $Path | Select-Object -Expand Name | Sort-Object {[version] $_})
+        if ($versions.Length -eq 0) {
+            throw "No versions found in $Path"
+        }
+
+        $version = $versions[-1]
+        return "${Path}\${version}", $version
+    }
+}
+function Get-AssembledPlugin() {
+    param(
+        [string]$Source,
+        [string[]]$Dependencies
+    )
+
+    $FrameworkPath, $FrameworkVersion = Find-PSModule $Framework
+    $PluginPath, $PluginVersion = Find-PSModule $Plugins
+
+    $comment, $params, $body = Read-Plugin-Parts -Source (Get-Content "${PluginPath}\${Source}")
 
     $notice = @(
         '<#'
-        'Assembled plugin based on Invoke-IcingaCheckCertificate from'
+        'Assembled plugin based on ${Source} from'
         'https://github.com/Icinga/icinga-powershell-plugins'
         ''
         "icinga-powershell-framework: ${FrameworkVersion}"
@@ -99,7 +116,13 @@ function Write-Check-Certificates() {
     $content += '# Tell the script the daemon is not running' + $NEWLINE
     $content += '$global:IcingaDaemonData = @{ FrameworkRunningAsDaemon = $FALSE }' + $NEWLINE + $NEWLINE
 
-    foreach($file in $files) {
+    foreach($file in $Dependencies) {
+        if ($file.StartsWith('plugins:')) {
+            $file = $file.Replace('plugins:', $PluginPath)
+        } elseif ($file.StartsWith('framework:')) {
+            $file = $file.Replace('framework:', $FrameworkPath)
+        }
+
         $content += $NEWLINE + "# Content from: " + $file + $NEWLINE
         $fileSource = Get-Content -Path $file `
             | Select-String -NotMatch -Pattern "Import-IcingaLib" `
@@ -109,6 +132,25 @@ function Write-Check-Certificates() {
 
     $content += $NEWLINE + "# Content from: " + $plugin + $NEWLINE
     $content += $body
+
+    return $content
+}
+
+function Write-Check-Certificates() {
+    $deps = @(
+        'framework:\lib\core\tools\New-StringTree.psm1'
+        'framework:\lib\core\tools\Format-IcingaPerfDataValue.psm1'
+        'framework:\lib\core\tools\Test-Numeric.psm1'
+        'framework:\lib\core\tools\ConvertTo-Seconds.psm1'
+        'framework:\lib\icinga\enums\Icinga_IcingaEnums.psm1'
+        'framework:\lib\icinga\plugin\New-IcingaCheck.psm1'
+        'framework:\lib\icinga\plugin\New-IcingaCheckPackage.psm1'
+        'framework:\lib\icinga\plugin\New-IcingaCheckResult.psm1'
+        'framework:\lib\icinga\plugin\Write-IcingaPluginOutput.psm1'
+        'plugins:\provider\certificate\Icinga_ProviderCertificate.psm1'
+    )
+
+    $content = Get-AssembledPlugin -Source 'plugins\Invoke-IcingaCheckCertificate.psm1' -Dependencies $deps
 
     $content | Out-File "Check-Certificate.ps1"
 }

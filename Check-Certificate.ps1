@@ -79,7 +79,7 @@
 #>
 
 <#
-Assembled plugin based on ${Source} from
+Assembled plugin based on plugins\Invoke-IcingaCheckCertificate.psm1 from
 https://github.com/Icinga/icinga-powershell-plugins
 
 icinga-powershell-framework: 1.4.1
@@ -1887,7 +1887,7 @@ function Get-IcingaCertStoreCertificates()
    return $CertStoreArray;
 }
 
-# Content from: 
+# Content from: plugins\Invoke-IcingaCheckCertificate.psm1
 
     $CertData    = Get-IcingaCertificateData `
         -CertStore $CertStore -CertThumbprint $CertThumbprint -CertSubject $CertSubject `

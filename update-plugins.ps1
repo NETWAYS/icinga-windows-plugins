@@ -42,7 +42,7 @@ function Read-Plugin-Parts()
                 $inParams = $FALSE
             }
         } elseif ($inBody) {
-            if ($line.Trim() -eq 'param(') {
+            if ($line.Trim() -match 'param\s*\(') {
                 $params += $line + $NEWLINE
                 $inParams = $TRUE
             } elseif ($line -eq '{') {
@@ -103,7 +103,7 @@ function Get-AssembledPlugin() {
 
     $notice = @(
         '<#'
-        'Assembled plugin based on ${Source} from'
+        "Assembled plugin based on ${Source} from"
         'https://github.com/Icinga/icinga-powershell-plugins'
         ''
         "icinga-powershell-framework: ${FrameworkVersion}"
@@ -130,7 +130,7 @@ function Get-AssembledPlugin() {
         $content += ($fileSource -Join $NEWLINE).Trim() + $NEWLINE
     }
 
-    $content += $NEWLINE + "# Content from: " + $plugin + $NEWLINE
+    $content += $NEWLINE + "# Content from: " + $Source + $NEWLINE
     $content += $body
 
     return $content

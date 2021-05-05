@@ -65,10 +65,12 @@ function Find-PSModule() {
     )
 
     $Path = $null
+    $Location = $null
 
     foreach ($p in ($env:PSModulePath -Split ';')) {
         if (Test-Path "${p}\${Name}") {
             $Path = "${p}\${Name}"
+            $Location = $p
             break
         }
     }
@@ -78,7 +80,9 @@ function Find-PSModule() {
     }
 
     if (Test-Path "${Path}\.git") {
-        return $Path, (git --git-dir "${Path}\.git" describe --tags)
+        $version = (git --git-dir "${Path}\.git" describe --tags);
+        $version = $version -replace '^v', '';
+        return $Path, $version, $Location;
     } else {
         # Find the newest version of a subdir
         $versions = [array](Get-ChildItem $Path | Select-Object -Expand Name | Sort-Object {[version] $_})
@@ -87,7 +91,7 @@ function Find-PSModule() {
         }
 
         $version = $versions[-1]
-        return "${Path}\${version}", $version
+        return "${Path}\${version}", $version, $Location
     }
 }
 function Get-AssembledPlugin() {
@@ -96,8 +100,8 @@ function Get-AssembledPlugin() {
         [string[]]$Dependencies
     )
 
-    $FrameworkPath, $FrameworkVersion = Find-PSModule $Framework
-    $PluginPath, $PluginVersion = Find-PSModule $Plugins
+    $FrameworkPath, $FrameworkVersion, $FrameworkLocation = Find-PSModule $Framework
+    $PluginPath, $PluginVersion, $PluginLocation = Find-PSModule $Plugins
 
     $comment, $params, $body = Read-Plugin-Parts -Source (Get-Content "${PluginPath}\${Source}")
 
@@ -119,15 +123,22 @@ function Get-AssembledPlugin() {
     foreach($file in $Dependencies) {
         if ($file.StartsWith('plugins:')) {
             $file = $file.Replace('plugins:', $PluginPath)
+            $shortFile = $file.Replace($PluginLocation + '\', '')
         } elseif ($file.StartsWith('framework:')) {
             $file = $file.Replace('framework:', $FrameworkPath)
+            $shortFile = $file.Replace($FrameworkLocation + '\', '')
         }
 
-        $content += $NEWLINE + "# Content from: " + $file + $NEWLINE
+        $content += $NEWLINE + "# Content from: " + $shortFile + $NEWLINE
         $fileSource = Get-Content -Path $file `
             | Select-String -NotMatch -Pattern "Import-IcingaLib" `
             | Select-String -NotMatch -Pattern "Export-ModuleMember"
-        $content += ($fileSource -Join $NEWLINE).Trim() + $NEWLINE
+        $fileContent = ($fileSource -Join $NEWLINE).Trim() + $NEWLINE;
+
+        # Remove usage of Get-IcingaCacheData
+        $fileContent = $fileContent.Replace('$CheckResultCache = Get-IcingaCacheData', '$CheckResultCache = $NULL; # Get-IcingaCacheData');
+
+        $content += $fileCOntent;
     }
 
     $content += $NEWLINE + "# Content from: " + $Source + $NEWLINE
@@ -163,7 +174,9 @@ function Write-Check-UNCPath() {
         'framework:\lib\core\tools\Convert-IcingaPluginThresholds.psm1'
         'framework:\lib\core\tools\Test-Numeric.psm1'
         'framework:\lib\core\tools\ConvertTo-Integer.psm1'
-        'framework:\lib\core\cache\Get-IcingaCacheData.psm1'
+        'framework:\lib\core\framework\Test-IcingaFrameworkConsoleOutput.psm1'
+        'framework:\lib\core\logging\Write-IcingaConsolePlain.psm1'
+        'framework:\lib\core\logging\Write-IcingaConsoleOutput.psm1'
         'framework:\lib\icinga\enums\Icinga_IcingaEnums.psm1'
         'framework:\lib\icinga\plugin\New-IcingaCheckPackage.psm1'
         'framework:\lib\icinga\plugin\New-IcingaCheck.psm1'
@@ -172,6 +185,7 @@ function Write-Check-UNCPath() {
         'framework:\lib\icinga\plugin\Write-IcingaPluginOutput.psm1'
         'framework:\lib\icinga\plugin\Write-IcingaPluginPerfData.psm1'
         'plugins:\provider\certificate\Icinga_ProviderCertificate.psm1'
+        'plugins:\provider\disks\Get-IcingaUNCPathSize.psm1'
     )
 
     $content = Get-AssembledPlugin -Source 'plugins\Invoke-IcingaCheckUNCPath.psm1' -Dependencies $deps

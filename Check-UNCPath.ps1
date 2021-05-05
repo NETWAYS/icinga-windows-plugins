@@ -102,7 +102,7 @@ icinga-powershell-plugins: 1.4.0
 $global:IcingaDaemonData = @{ FrameworkRunningAsDaemon = $FALSE }
 
 
-# Content from: C:\Users\marku\Documents\PowerShell\Modules\icinga-powershell-framework\1.4.1\lib\core\tools\New-StringTree.psm1
+# Content from: icinga-powershell-framework\lib\core\tools\New-StringTree.psm1
 function New-StringTree()
 {
     param(
@@ -123,7 +123,7 @@ function New-StringTree()
     return $spaces;
 }
 
-# Content from: C:\Users\marku\Documents\PowerShell\Modules\icinga-powershell-framework\1.4.1\lib\core\tools\Format-IcingaPerfDataLabel.psm1
+# Content from: icinga-powershell-framework\lib\core\tools\Format-IcingaPerfDataLabel.psm1
 function Format-IcingaPerfDataLabel()
 {
     param(
@@ -139,7 +139,7 @@ function Format-IcingaPerfDataLabel()
     return $Output;
 }
 
-# Content from: C:\Users\marku\Documents\PowerShell\Modules\icinga-powershell-framework\1.4.1\lib\core\tools\Format-IcingaPerfDataValue.psm1
+# Content from: icinga-powershell-framework\lib\core\tools\Format-IcingaPerfDataValue.psm1
 function Format-IcingaPerfDataValue()
 {
     param(
@@ -155,7 +155,7 @@ function Format-IcingaPerfDataValue()
     return (([string]([math]::round([decimal]$PerfValue, 6))).Replace(',', '.'));
 }
 
-# Content from: C:\Users\marku\Documents\PowerShell\Modules\icinga-powershell-framework\1.4.1\lib\core\tools\Convert-IcingaPluginThresholds.psm1
+# Content from: icinga-powershell-framework\lib\core\tools\Convert-IcingaPluginThresholds.psm1
 <#
 .SYNOPSIS
     Converts any kind of Icinga threshold with provided units
@@ -319,7 +319,7 @@ function Convert-IcingaPluginThresholds()
     return $RetValue;
 }
 
-# Content from: C:\Users\marku\Documents\PowerShell\Modules\icinga-powershell-framework\1.4.1\lib\core\tools\Test-Numeric.psm1
+# Content from: icinga-powershell-framework\lib\core\tools\Test-Numeric.psm1
 <#
 .SYNOPSIS
    Tests whether a value is numeric
@@ -338,7 +338,7 @@ function Test-Numeric ($number) {
     return $number -Match "^[\d\.]+$";
 }
 
-# Content from: C:\Users\marku\Documents\PowerShell\Modules\icinga-powershell-framework\1.4.1\lib\core\tools\ConvertTo-Integer.psm1
+# Content from: icinga-powershell-framework\lib\core\tools\ConvertTo-Integer.psm1
 <#
 .SYNOPSIS
    Helper function to convert values to integer if possible
@@ -405,65 +405,148 @@ function ConvertTo-Integer()
     return $Value;
 }
 
-# Content from: C:\Users\marku\Documents\PowerShell\Modules\icinga-powershell-framework\1.4.1\lib\core\cache\Get-IcingaCacheData.psm1
+# Content from: icinga-powershell-framework\lib\core\framework\Test-IcingaFrameworkConsoleOutput.psm1
 <#
 .SYNOPSIS
-    Reads data from a cache file of the Framework and returns its content
+   Allows to test if console output can be written or not for this PowerShell session
 .DESCRIPTION
-    Allows a developer to read data from certain cache files to either speed up
-    loading procedures, to store content to not lose data on restarts of a daemon
-    or to build data tables over time
+   Allows to test if console output can be written or not for this PowerShell session
 .FUNCTIONALITY
-    Returns cached data for specific content
+   Allows to test if console output can be written or not for this PowerShell session
 .EXAMPLE
-    PS>Get-IcingaCacheData -Space 'sc_daemon' -CacheStore 'checkresult_store' -KeyName 'Invoke-IcingaCheckCPU';
-.PARAMETER Space
-    The individual space to read from. This is targeted to a folder the cache data is written to under icinga-powershell-framework/cache/
-.PARAMETER CacheStore
-    This is targeted to a sub-folder under icinga-powershell-framework/cache/<space>/
-.PARAMETER KeyName
-    This is the actual cache file located under icinga-powershell-framework/cache/<space>/<CacheStore>/<KeyName>.json
-    Please note to only provide the name without the '.json' apendix. This is done by the module itself
-.INPUTS
-    System.String
-.OUTPUTS
-    System.Object
+   PS>Enable-IcingaFrameworkConsoleOutput;
 .LINK
-    https://github.com/Icinga/icinga-powershell-framework
-.NOTES
+   https://github.com/Icinga/icinga-powershell-framework
 #>
-function Get-IcingaCacheData()
+
+function Test-IcingaFrameworkConsoleOutput()
 {
-    param(
-        [string]$Space,
-        [string]$CacheStore,
-        [string]$KeyName
+    if ($null -eq $global:Icinga) {
+        return $TRUE;
+    }
+
+    if ($global:Icinga.ContainsKey('DisableConsoleOutput') -eq $FALSE) {
+        return $TRUE;
+    }
+
+    return (-Not ($global:Icinga.DisableConsoleOutput));
+}
+
+# Content from: icinga-powershell-framework\lib\core\logging\Write-IcingaConsolePlain.psm1
+<#
+.SYNOPSIS
+   Default Cmdlet for printing plain messages to console
+.DESCRIPTION
+   Default Cmdlet for printing plain messages to console
+.FUNCTIONALITY
+   Default Cmdlet for printing plain messages to console
+.EXAMPLE
+   PS>Write-IcingaConsolePlain -Message 'Test message: {0}' -Objects 'Hello World';
+.PARAMETER Message
+   The message to print with {x} placeholdes replaced by content inside the Objects array. Replace x with the
+   number of the index from the objects array
+.PARAMETER Objects
+   An array of objects being added to a provided message. The index of the array position has to refer to the
+   message locations.
+.INPUTS
+   System.String
+.LINK
+   https://github.com/Icinga/icinga-powershell-framework
+#>
+
+function Write-IcingaConsolePlain()
+{
+    param (
+        [string]$Message,
+        [array]$Objects,
+        [ValidateSet('Default', 'Black', 'DarkBlue', 'DarkGreen', 'DarkCyan', 'DarkRed', 'DarkMagenta', 'DarkYellow', 'Gray', 'DarkGray', 'Blue', 'Green', 'Cyan', 'Red', 'Magenta', 'Yellow', 'White')]
+        [string]$ForeColor = 'Default'
     );
 
-    $CacheFile       = Join-Path -Path (Join-Path -Path (Join-Path -Path (Get-IcingaCacheDir) -ChildPath $Space) -ChildPath $CacheStore) -ChildPath ([string]::Format('{0}.json', $KeyName));
-    [string]$Content = '';
-    $cacheData       = @{ };
+    Write-IcingaConsoleOutput `
+        -Message $Message `
+        -Objects $Objects `
+        -ForeColor $ForeColor `
+        -Severity $null;
+}
 
-    if ((Test-Path $CacheFile) -eq $FALSE) {
-        return $null;
+# Content from: icinga-powershell-framework\lib\core\logging\Write-IcingaConsoleOutput.psm1
+<#
+.SYNOPSIS
+   Standardise console output and make handling of object conversion easier into messages
+   by using this standard function for displaying severity and log entries
+.DESCRIPTION
+   Standardised function to output console messages controlled by the arguments provided
+   for coloring, displaying severity and add objects into output messages
+.FUNCTIONALITY
+   Standardise console output and make handling of object conversion easier into messages
+   by using this standard function for displaying severity and log entries
+.EXAMPLE
+   PS>Write-IcingaConsoleOutput -Message 'Test message: {0}' -Objects 'Hello World' -ForeColor 'Green' -Severity 'Test';
+.PARAMETER Message
+   The message to print with {x} placeholdes replaced by content inside the Objects array. Replace x with the
+   number of the index from the objects array
+.PARAMETER Objects
+   An array of objects being added to a provided message. The index of the array position has to refer to the
+   message locations.
+.PARAMETER ForeColor
+   The color the severity name will be displayed in
+.PARAMETER Severity
+   The severity being displayed before the actual message. Leave empty to skip.
+.INPUTS
+   System.String
+.LINK
+   https://github.com/Icinga/icinga-powershell-framework
+#>
+
+function Write-IcingaConsoleOutput()
+{
+    param (
+        [string]$Message,
+        [array]$Objects,
+        [ValidateSet('Default', 'Black', 'DarkBlue', 'DarkGreen', 'DarkCyan', 'DarkRed', 'DarkMagenta', 'DarkYellow', 'Gray', 'DarkGray', 'Blue', 'Green', 'Cyan', 'Red', 'Magenta', 'Yellow', 'White')]
+        [string]$ForeColor = 'Default',
+        [string]$Severity  = 'Notice'
+    );
+
+    if ((Test-IcingaFrameworkConsoleOutput) -eq $FALSE) {
+        return;
     }
 
-    $Content = Read-IcingaFileContent -File $CacheFile;
-
-    if ([string]::IsNullOrEmpty($Content)) {
-        return $null;
+    # Never write console output in case the Framework is running as daemon
+    if ($null -ne $global:IcingaDaemonData -And $null -ne $global:IcingaDaemonData.FrameworkRunningAsDaemon -And $global:IcingaDaemonData.FrameworkRunningAsDaemon -eq $TRUE) {
+        return;
     }
 
-    $cacheData = ConvertFrom-Json -InputObject ([string]$Content);
+    $OutputMessage = $Message;
+    [int]$Index    = 0;
 
-    if ([string]::IsNullOrEmpty($KeyName)) {
-        return $cacheData;
+    foreach ($entry in $Objects) {
+
+        $OutputMessage = $OutputMessage.Replace(
+            [string]::Format('{0}{1}{2}', '{', $Index, '}'),
+            $entry
+        );
+        $Index++;
+    }
+
+    if ([string]::IsNullOrEmpty($Severity) -eq $FALSE) {
+        Write-Host '[' -NoNewline;
+        Write-Host $Severity -NoNewline -ForegroundColor $ForeColor;
+        Write-Host ']: ' -NoNewline;
+        Write-Host $OutputMessage;
+
+        return;
+    }
+
+    if ($ForeColor -eq 'Default') {
+        Write-Host $OutputMessage;
     } else {
-        return $cacheData.$KeyName;
+        Write-Host $OutputMessage -ForegroundColor $ForeColor;
     }
 }
 
-# Content from: C:\Users\marku\Documents\PowerShell\Modules\icinga-powershell-framework\1.4.1\lib\icinga\enums\Icinga_IcingaEnums.psm1
+# Content from: icinga-powershell-framework\lib\icinga\enums\Icinga_IcingaEnums.psm1
 <#
  # This script will provide 'Enums' we can use within our module to
  # easier access constants and to maintain a better overview of the
@@ -545,7 +628,7 @@ function Get-IcingaCacheData()
     }
 }
 
-# Content from: C:\Users\marku\Documents\PowerShell\Modules\icinga-powershell-framework\1.4.1\lib\icinga\plugin\New-IcingaCheckPackage.psm1
+# Content from: icinga-powershell-framework\lib\icinga\plugin\New-IcingaCheckPackage.psm1
 function New-IcingaCheckPackage()
 {
     param(
@@ -1028,7 +1111,7 @@ function New-IcingaCheckPackage()
     return $Check;
 }
 
-# Content from: C:\Users\marku\Documents\PowerShell\Modules\icinga-powershell-framework\1.4.1\lib\icinga\plugin\New-IcingaCheck.psm1
+# Content from: icinga-powershell-framework\lib\icinga\plugin\New-IcingaCheck.psm1
 function New-IcingaCheck()
 {
     param(
@@ -1883,7 +1966,7 @@ function New-IcingaCheck()
     return $Check;
 }
 
-# Content from: C:\Users\marku\Documents\PowerShell\Modules\icinga-powershell-framework\1.4.1\lib\icinga\plugin\New-IcingaCheckResult.psm1
+# Content from: icinga-powershell-framework\lib\icinga\plugin\New-IcingaCheckResult.psm1
 function New-IcingaCheckresult()
 {
     param(
@@ -1921,7 +2004,7 @@ function New-IcingaCheckresult()
     return $CheckResult;
 }
 
-# Content from: C:\Users\marku\Documents\PowerShell\Modules\icinga-powershell-framework\1.4.1\lib\icinga\plugin\New-IcingaPerformanceDataEntry.psm1
+# Content from: icinga-powershell-framework\lib\icinga\plugin\New-IcingaPerformanceDataEntry.psm1
 function New-IcingaPerformanceDataEntry()
 {
     param (
@@ -1968,7 +2051,7 @@ function New-IcingaPerformanceDataEntry()
     );
 }
 
-# Content from: C:\Users\marku\Documents\PowerShell\Modules\icinga-powershell-framework\1.4.1\lib\icinga\plugin\Write-IcingaPluginOutput.psm1
+# Content from: icinga-powershell-framework\lib\icinga\plugin\Write-IcingaPluginOutput.psm1
 function Write-IcingaPluginOutput()
 {
     param(
@@ -1983,7 +2066,7 @@ function Write-IcingaPluginOutput()
     }
 }
 
-# Content from: C:\Users\marku\Documents\PowerShell\Modules\icinga-powershell-framework\1.4.1\lib\icinga\plugin\Write-IcingaPluginPerfData.psm1
+# Content from: icinga-powershell-framework\lib\icinga\plugin\Write-IcingaPluginPerfData.psm1
 function Write-IcingaPluginPerfData()
 {
     param(
@@ -1999,7 +2082,7 @@ function Write-IcingaPluginPerfData()
         $PerformanceData = $PerformanceData.perfdata;
     }
 
-    $CheckResultCache = Get-IcingaCacheData -Space 'sc_daemon' -CacheStore 'checkresult' -KeyName $CheckCommand;
+    $CheckResultCache = $NULL; # Get-IcingaCacheData -Space 'sc_daemon' -CacheStore 'checkresult' -KeyName $CheckCommand;
 
     if ($global:IcingaDaemonData.FrameworkRunningAsDaemon -eq $FALSE) {
         [string]$PerfDataOutput = (Get-IcingaPluginPerfDataContent -PerfData $PerformanceData -CheckResultCache $CheckResultCache);
@@ -2051,7 +2134,7 @@ function Get-IcingaPluginPerfDataContent()
     return $PerfDataOutput;
 }
 
-# Content from: C:\Users\marku\Documents\PowerShell\Modules\icinga-powershell-plugins\1.4.0\provider\certificate\Icinga_ProviderCertificate.psm1
+# Content from: icinga-powershell-plugins\provider\certificate\Icinga_ProviderCertificate.psm1
 function Get-IcingaCertificateData()
 {
    param(
@@ -2164,6 +2247,62 @@ function Get-IcingaCertStoreCertificates()
    }
 
    return $CertStoreArray;
+}
+
+# Content from: icinga-powershell-plugins\provider\disks\Get-IcingaUNCPathSize.psm1
+function Get-IcingaUNCPathSize()
+{
+    param (
+        [string]$Path
+    );
+
+    # Lets ensure our path does actually exist
+    if ([string]::IsNullOrEmpty($Path) -Or (Test-Path $Path) -eq $FALSE) {
+        Exit-IcingaThrowException -ExceptionType 'Configuration' `
+            -ExceptionThrown $IcingaExceptions.Configuration.PluginArgumentMissing `
+            -CustomMessage 'Plugin argument "-Path" is either empty or does not exist' `
+            -Force;
+    }
+
+    # Register our kernel32.dll Windows API function call
+Add-Type -TypeDefinition @"
+    using System;
+    using System.Runtime.InteropServices;
+
+    public static class kernel32 {
+        [DllImport("kernel32.dll", PreserveSig = true, CharSet = CharSet.Auto)]
+
+        public static extern int GetDiskFreeSpaceEx(
+            IntPtr lpDirectoryName,           // UNC Path for share
+            out long lpFreeBytesAvailable,    // Free Bytes available on path
+            out long lpTotalNumberOfBytes,    // Bytes available on target disk / path
+            out long lpTotalNumberOfFreeBytes // Total available space on target disk / path
+        );
+    }
+"@
+
+    # Setup variables as object which we can use to reference data into
+    $ShareFree = New-Object -TypeName long;
+    $ShareSize = New-Object -TypeName long;
+    $TotalFree = New-Object -TypeName long;
+
+    # Create a pointer object to our share
+    [System.IntPtr]$ptrPath = [System.Runtime.InteropServices.Marshal]::StringToHGlobalAuto($Path);
+
+    # Call our function we registered within the Add-Type definition
+    [kernel32]::GetDiskFreeSpaceEx($ptrPath, [ref]$ShareFree, [ref]$ShareSize, [ref]$TotalFree) | Out-Null;
+    $ShareFreePercent = 0;
+
+    if ($ShareSize -ne 0) {
+        $ShareFreePercent = ([math]::round(($ShareFree / $ShareSize * 100), 2));
+    }
+
+    return @{
+        'ShareFree'        = $ShareFree;
+        'ShareSize'        = $ShareSize;
+        'ShareFreePercent' = $ShareFreePercent;
+        'TotalFree'        = $TotalFree;
+    };
 }
 
 # Content from: plugins\Invoke-IcingaCheckUNCPath.psm1

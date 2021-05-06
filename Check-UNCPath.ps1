@@ -102,57 +102,191 @@ icinga-powershell-plugins: 1.4.0
 $global:IcingaDaemonData = @{ FrameworkRunningAsDaemon = $FALSE }
 
 
-# Content from: icinga-powershell-framework\lib\core\tools\New-StringTree.psm1
-function New-StringTree()
+# Content from: icinga-powershell-framework\lib\core\framework\Test-IcingaFrameworkConsoleOutput.psm1
+<#
+.SYNOPSIS
+   Allows to test if console output can be written or not for this PowerShell session
+.DESCRIPTION
+   Allows to test if console output can be written or not for this PowerShell session
+.FUNCTIONALITY
+   Allows to test if console output can be written or not for this PowerShell session
+.EXAMPLE
+   PS>Enable-IcingaFrameworkConsoleOutput;
+.LINK
+   https://github.com/Icinga/icinga-powershell-framework
+#>
+
+function Test-IcingaFrameworkConsoleOutput()
 {
-    param(
-        [int]$Spacing
-    )
-
-    if ($Spacing -eq 0) {
-        return '';
+    if ($null -eq $global:Icinga) {
+        return $TRUE;
     }
 
-    [string]$spaces = '\_ ';
-
-    while ($Spacing -gt 1) {
-        $Spacing -= 1;
-        $spaces = '   ' + $spaces;
+    if ($global:Icinga.ContainsKey('DisableConsoleOutput') -eq $FALSE) {
+        return $TRUE;
     }
 
-    return $spaces;
+    return (-Not ($global:Icinga.DisableConsoleOutput));
 }
 
-# Content from: icinga-powershell-framework\lib\core\tools\Format-IcingaPerfDataLabel.psm1
-function Format-IcingaPerfDataLabel()
+# Content from: icinga-powershell-framework\lib\core\logging\Write-IcingaConsoleOutput.psm1
+<#
+.SYNOPSIS
+   Standardise console output and make handling of object conversion easier into messages
+   by using this standard function for displaying severity and log entries
+.DESCRIPTION
+   Standardised function to output console messages controlled by the arguments provided
+   for coloring, displaying severity and add objects into output messages
+.FUNCTIONALITY
+   Standardise console output and make handling of object conversion easier into messages
+   by using this standard function for displaying severity and log entries
+.EXAMPLE
+   PS>Write-IcingaConsoleOutput -Message 'Test message: {0}' -Objects 'Hello World' -ForeColor 'Green' -Severity 'Test';
+.PARAMETER Message
+   The message to print with {x} placeholdes replaced by content inside the Objects array. Replace x with the
+   number of the index from the objects array
+.PARAMETER Objects
+   An array of objects being added to a provided message. The index of the array position has to refer to the
+   message locations.
+.PARAMETER ForeColor
+   The color the severity name will be displayed in
+.PARAMETER Severity
+   The severity being displayed before the actual message. Leave empty to skip.
+.INPUTS
+   System.String
+.LINK
+   https://github.com/Icinga/icinga-powershell-framework
+#>
+
+function Write-IcingaConsoleOutput()
 {
-    param(
-        $PerfData
+    param (
+        [string]$Message,
+        [array]$Objects,
+        [ValidateSet('Default', 'Black', 'DarkBlue', 'DarkGreen', 'DarkCyan', 'DarkRed', 'DarkMagenta', 'DarkYellow', 'Gray', 'DarkGray', 'Blue', 'Green', 'Cyan', 'Red', 'Magenta', 'Yellow', 'White')]
+        [string]$ForeColor = 'Default',
+        [string]$Severity  = 'Notice'
     );
 
-    $Output = ((($PerfData) -Replace ' ', '_') -Replace '[\W]', '');
-
-    while ($Output.Contains('__')) {
-        $Output = $Output.Replace('__', '_');
+    if ((Test-IcingaFrameworkConsoleOutput) -eq $FALSE) {
+        return;
     }
-    # Remove all special characters and spaces on label names
-    return $Output;
+
+    # Never write console output in case the Framework is running as daemon
+    if ($null -ne $global:IcingaDaemonData -And $null -ne $global:IcingaDaemonData.FrameworkRunningAsDaemon -And $global:IcingaDaemonData.FrameworkRunningAsDaemon -eq $TRUE) {
+        return;
+    }
+
+    $OutputMessage = $Message;
+    [int]$Index    = 0;
+
+    foreach ($entry in $Objects) {
+
+        $OutputMessage = $OutputMessage.Replace(
+            [string]::Format('{0}{1}{2}', '{', $Index, '}'),
+            $entry
+        );
+        $Index++;
+    }
+
+    if ([string]::IsNullOrEmpty($Severity) -eq $FALSE) {
+        Write-Host '[' -NoNewline;
+        Write-Host $Severity -NoNewline -ForegroundColor $ForeColor;
+        Write-Host ']: ' -NoNewline;
+        Write-Host $OutputMessage;
+
+        return;
+    }
+
+    if ($ForeColor -eq 'Default') {
+        Write-Host $OutputMessage;
+    } else {
+        Write-Host $OutputMessage -ForegroundColor $ForeColor;
+    }
 }
 
-# Content from: icinga-powershell-framework\lib\core\tools\Format-IcingaPerfDataValue.psm1
-function Format-IcingaPerfDataValue()
+# Content from: icinga-powershell-framework\lib\core\logging\Write-IcingaConsolePlain.psm1
+<#
+.SYNOPSIS
+   Default Cmdlet for printing plain messages to console
+.DESCRIPTION
+   Default Cmdlet for printing plain messages to console
+.FUNCTIONALITY
+   Default Cmdlet for printing plain messages to console
+.EXAMPLE
+   PS>Write-IcingaConsolePlain -Message 'Test message: {0}' -Objects 'Hello World';
+.PARAMETER Message
+   The message to print with {x} placeholdes replaced by content inside the Objects array. Replace x with the
+   number of the index from the objects array
+.PARAMETER Objects
+   An array of objects being added to a provided message. The index of the array position has to refer to the
+   message locations.
+.INPUTS
+   System.String
+.LINK
+   https://github.com/Icinga/icinga-powershell-framework
+#>
+
+function Write-IcingaConsolePlain()
 {
-    param(
-        $PerfValue
+    param (
+        [string]$Message,
+        [array]$Objects,
+        [ValidateSet('Default', 'Black', 'DarkBlue', 'DarkGreen', 'DarkCyan', 'DarkRed', 'DarkMagenta', 'DarkYellow', 'Gray', 'DarkGray', 'Blue', 'Green', 'Cyan', 'Red', 'Magenta', 'Yellow', 'White')]
+        [string]$ForeColor = 'Default'
     );
 
-    if ((Test-Numeric $PerfValue) -eq $FALSE) {
-        return $PerfValue;
+    Write-IcingaConsoleOutput `
+        -Message $Message `
+        -Objects $Objects `
+        -ForeColor $ForeColor `
+        -Severity $null;
+}
+
+# Content from: icinga-powershell-framework\lib\core\tools\Convert-Bytes.psm1
+function Convert-Bytes()
+{
+    param(
+        [string]$Value,
+        [string]$Unit
+    );
+
+    If (($Value -Match "(^[\d\.]*) ?(B|KB|MB|GB|TB|PT|KiB|MiB|GiB|TiB|PiB)") -eq $FALSE) {
+        $Value = [string]::Format('{0}B', $Value);
     }
 
-    # Convert our value to a string and replace ',' with a '.' to allow Icinga to parse the output
-    # In addition, round every output to 6 digits
-    return (([string]([math]::round([decimal]$PerfValue, 6))).Replace(',', '.'));
+    If (($Value -Match "(^[\d\.]*) ?(B|KB|MB|GB|TB|PT|KiB|MiB|GiB|TiB|PiB)")) {
+        [single]$CurrentValue = $Matches[1];
+        [string]$CurrentUnit = $Matches[2];
+
+        switch ($CurrentUnit) {
+            { 'KiB', 'MiB', 'GiB', 'TiB', 'PiB' -contains $_ } { $CurrentValue = ConvertTo-ByteIEC $CurrentValue $CurrentUnit; $boolOption = $true; }
+            { 'KB', 'MB', 'GB', 'TB', 'PB' -contains $_ } { $CurrentValue = ConvertTo-ByteSI $CurrentValue $CurrentUnit; $boolOption = $true; }
+        }
+
+        switch ($Unit) {
+            { 'B' -contains $_ } { $FinalValue = $CurrentValue; $boolOption = $true; }
+            { 'KB' -contains $_ } { $FinalValue = ConvertTo-Kilobyte $CurrentValue -Unit B; $boolOption = $true; }
+            { 'MB' -contains $_ } { $FinalValue = ConvertTo-Megabyte $CurrentValue -Unit B; $boolOption = $true; }
+            { 'GB' -contains $_ } { $FinalValue = ConvertTo-Gigabyte $CurrentValue -Unit B; $boolOption = $true; }
+            { 'TB' -contains $_ } { $FinalValue = ConvertTo-Terabyte $CurrentValue -Unit B; $boolOption = $true; }
+            { 'PB' -contains $_ } { $FinalValue = ConvertTo-Petabyte $CurrentValue -Unit B; $boolOption = $true; }
+            { 'KiB' -contains $_ } { $FinalValue = ConvertTo-Kibibyte $CurrentValue -Unit B; $boolOption = $true; }
+            { 'MiB' -contains $_ } { $FinalValue = ConvertTo-Mebibyte $CurrentValue -Unit B; $boolOption = $true; }
+            { 'GiB' -contains $_ } { $FinalValue = ConvertTo-Gibibyte $CurrentValue -Unit B; $boolOption = $true; }
+            { 'TiB' -contains $_ } { $FinalValue = ConvertTo-Tebibyte $CurrentValue -Unit B; $boolOption = $true; }
+            { 'PiB' -contains $_ } { $FinalValue = ConvertTo-Petabyte $CurrentValue -Unit B; $boolOption = $true; }
+
+            default {
+                if (-Not $boolOption) {
+                    Exit-IcingaThrowException -ExceptionType 'Input' -ExceptionThrown $IcingaExceptions.Inputs.ConversionUnitMissing -Force;
+                }
+            }
+        }
+        return @{'value' = ([decimal]$FinalValue); 'pastunit' = $CurrentUnit; 'endunit' = $Unit };
+    }
+
+    Exit-IcingaThrowException -ExceptionType 'Input' -ExceptionThrown $IcingaExceptions.Inputs.ConversionUnitMissing -Force;
 }
 
 # Content from: icinga-powershell-framework\lib\core\tools\Convert-IcingaPluginThresholds.psm1
@@ -319,23 +453,390 @@ function Convert-IcingaPluginThresholds()
     return $RetValue;
 }
 
-# Content from: icinga-powershell-framework\lib\core\tools\Test-Numeric.psm1
+# Content from: icinga-powershell-framework\lib\core\tools\ConvertTo-ByteUnitIEC.psm1
+function ConvertTo-ByteIEC()
+{
+    param(
+        [single]$Value,
+        [string]$Unit
+    );
+
+    switch ($Unit) {
+        { 'B', 'Byte' -contains $_ } { $result = $Value; $boolOption = $true; }
+        { 'KiB', 'Kibibyte' -contains $_ } { $result = ($Value * [math]::Pow(2, 10)); $boolOption = $true; }
+        { 'MiB', 'Mebibyte' -contains $_ } { $result = ($Value * [math]::Pow(2, 20)); $boolOption = $true; }
+        { 'GiB', 'Gibibyte' -contains $_ } { $result = ($Value * [math]::Pow(2, 30)); $boolOption = $true; }
+        { 'TiB', 'Tebibyte' -contains $_ } { $result = ($Value * [math]::Pow(2, 40)); $boolOption = $true; }
+        { 'PiB', 'Pebibyte' -contains $_ } { $result = ($Value * [math]::Pow(2, 50)); $boolOption = $true; }
+        default {
+            if (-Not $boolOption) {
+                Exit-IcingaThrowException -ExceptionType 'Input' -ExceptionThrown $IcingaExceptions.Inputs.ConversionUnitMissing -Force;
+            }
+        }
+    }
+
+    return $result;
+}
+
+function ConvertTo-Kibibyte()
+{
+    param(
+        [single]$Value,
+        [string]$Unit
+    );
+
+    switch ($Unit) {
+        { 'B', 'Byte' -contains $_ } { $result = ($Value / [math]::Pow(2, 10)); $boolOption = $true; }
+        { 'KiB', 'Kibibyte' -contains $_ } { $result = $Value; $boolOption = $true; }
+        { 'MiB', 'Mebibyte' -contains $_ } { $result = ($Value * [math]::Pow(2, 10)); $boolOption = $true; }
+        { 'GiB', 'Gibibyte' -contains $_ } { $result = ($Value * [math]::Pow(2, 20)); $boolOption = $true; }
+        { 'TiB', 'Tebibyte' -contains $_ } { $result = ($Value * [math]::Pow(2, 30)); $boolOption = $true; }
+        { 'PiB', 'Pebibyte' -contains $_ } { $result = ($Value * [math]::Pow(2, 40)); $boolOption = $true; }
+        default {
+            if (-Not $boolOption) {
+                Exit-IcingaThrowException -ExceptionType 'Input' -ExceptionThrown $IcingaExceptions.Inputs.ConversionUnitMissing -Force;
+            }
+        }
+    }
+
+    return $result;
+}
+
+function ConvertTo-Mebibyte()
+{
+    param(
+        [single]$Value,
+        [string]$Unit
+    );
+
+    switch ($Unit) {
+        { 'B', 'Byte' -contains $_ } { $result = ($Value / [math]::Pow(2, 20)); $boolOption = $true; }
+        { 'KiB', 'Kibibyte' -contains $_ } { $result = ($Value / [math]::Pow(2, 10)); $boolOption = $true; }
+        { 'MiB', 'Mebibyte' -contains $_ } { $result = $Value; $boolOption = $true; }
+        { 'GiB', 'Gibibyte' -contains $_ } { $result = ($Value * [math]::Pow(2, 10)); $boolOption = $true; }
+        { 'TiB', 'Tebibyte' -contains $_ } { $result = ($Value * [math]::Pow(2, 20)); $boolOption = $true; }
+        { 'PiB', 'Pebibyte' -contains $_ } { $result = ($Value * [math]::Pow(2, 30)); $boolOption = $true; }
+        default {
+            if (-Not $boolOption) {
+                Exit-IcingaThrowException -ExceptionType 'Input' -ExceptionThrown $IcingaExceptions.Inputs.ConversionUnitMissing -Force;
+            }
+        }
+    }
+
+    return $result;
+}
+
+function ConvertTo-Gibibyte()
+{
+    param(
+        [single]$Value,
+        [string]$Unit
+    );
+
+    switch ($Unit) {
+        { 'B', 'Byte' -contains $_ } { $result = ($Value / [math]::Pow(2, 30)); $boolOption = $true; }
+        { 'KiB', 'Kibibyte' -contains $_ } { $result = ($Value / [math]::Pow(2, 20)); $boolOption = $true; }
+        { 'MiB', 'Mebibyte' -contains $_ } { $result = ($Value / [math]::Pow(2, 10)); $boolOption = $true; }
+        { 'GiB', 'Gibibyte' -contains $_ } { $result = $Value; $boolOption = $true; }
+        { 'TiB', 'Tebibyte' -contains $_ } { $result = ($Value * [math]::Pow(2, 10)); $boolOption = $true; }
+        { 'PiB', 'Pebibyte' -contains $_ } { $result = ($Value * [math]::Pow(2, 20)); $boolOption = $true; }
+        default {
+            if (-Not $boolOption) {
+                Exit-IcingaThrowException -ExceptionType 'Input' -ExceptionThrown $IcingaExceptions.Inputs.ConversionUnitMissing -Force;
+            }
+        }
+    }
+
+    return $result;
+}
+
+function ConvertTo-Tebibyte()
+{
+    param(
+        [single]$Value,
+        [string]$Unit
+    );
+
+    switch ($Unit) {
+        { 'B', 'Byte' -contains $_ } { $result = ($Value / [math]::Pow(2, 40)); $boolOption = $true; }
+        { 'KiB', 'Kibibyte' -contains $_ } { $result = ($Value / [math]::Pow(2, 30)); $boolOption = $true; }
+        { 'MiB', 'Mebibyte' -contains $_ } { $result = ($Value / [math]::Pow(2, 20)); $boolOption = $true; }
+        { 'GiB', 'Gibibyte' -contains $_ } { $result = ($Value / [math]::Pow(2, 10)); $boolOption = $true; }
+        { 'TiB', 'Tebibyte' -contains $_ } { $result = $Value; $boolOption = $true; }
+        { 'PiB', 'Pebibyte' -contains $_ } { $result = ($Value * [math]::Pow(2, 10)); $boolOption = $true; }
+        default {
+            if (-Not $boolOption) {
+                Exit-IcingaThrowException -ExceptionType 'Input' -ExceptionThrown $IcingaExceptions.Inputs.ConversionUnitMissing -Force;
+            }
+        }
+    }
+
+    return $result;
+}
+
+function ConvertTo-Pebibyte()
+{
+    param(
+        [single]$Value,
+        [string]$Unit
+    );
+
+    switch ($Unit) {
+        { 'B', 'Byte' -contains $_ } { $result = ($Value / [math]::Pow(2, 50)); $boolOption = $true; }
+        { 'KiB', 'Kibibyte' -contains $_ } { $result = ($Value / [math]::Pow(2, 40)); $boolOption = $true; }
+        { 'MiB', 'Mebibyte' -contains $_ } { $result = ($Value / [math]::Pow(2, 30)); $boolOption = $true; }
+        { 'GiB', 'Gibibyte' -contains $_ } { $result = ($Value / [math]::Pow(2, 20)); $boolOption = $true; }
+        { 'TiB', 'Tebibyte' -contains $_ } { $result = ($Value / [math]::Pow(2, 10)); $boolOption = $true; }
+        { 'PiB', 'Pebibyte' -contains $_ } { $result = $Value; $boolOption = $true; }
+        default {
+            if (-Not $boolOption) {
+                Exit-IcingaThrowException -ExceptionType 'Input' -ExceptionThrown $IcingaExceptions.Inputs.ConversionUnitMissing -Force;
+            }
+        }
+    }
+
+    return $result;
+}
+
+# Content from: icinga-powershell-framework\lib\core\tools\ConvertTo-ByteUnitSI.psm1
 <#
 .SYNOPSIS
-   Tests whether a value is numeric
+   Converts unit sizes to byte.
 .DESCRIPTION
-   This module tests whether a value is numeric
+   This module converts a given unit size to byte.
+   e.g Kilobyte to Byte.
 
    More Information on https://github.com/Icinga/icinga-powershell-framework
 .EXAMPLE
-   PS> Test-Numeric 32
-   True
+   PS> ConvertTo-Byte -Unit TB 200
+   200000000000000
 .LINK
    https://github.com/Icinga/icinga-powershell-framework
 .NOTES
 #>
-function Test-Numeric ($number) {
-    return $number -Match "^[\d\.]+$";
+
+function ConvertTo-ByteSI()
+{
+    param(
+        [single]$Value,
+        [string]$Unit
+    );
+
+    switch ($Unit) {
+        { 'B', 'Byte' -contains $_ } { $result = $Value; $boolOption = $true; }
+        { 'KB', 'Kilobyte' -contains $_ } { $result = ($Value * [math]::Pow(10, 3)); $boolOption = $true; }
+        { 'MB', 'Megabyte' -contains $_ } { $result = ($Value * [math]::Pow(10, 6)); $boolOption = $true; }
+        { 'GB', 'Gigabyte' -contains $_ } { $result = ($Value * [math]::Pow(10, 9)); $boolOption = $true; }
+        { 'TB', 'Terabyte' -contains $_ } { $result = ($Value * [math]::Pow(10, 12)); $boolOption = $true; }
+        { 'PB', 'Petabyte' -contains $_ } { $result = ($Value * [math]::Pow(10, 15)); $boolOption = $true; }
+        default {
+            if (-Not $boolOption) {
+                Exit-IcingaThrowException -ExceptionType 'Input' -ExceptionThrown $IcingaExceptions.Inputs.ConversionUnitMissing -Force;
+            }
+        }
+    }
+
+    return $result;
+}
+
+<#
+.SYNOPSIS
+   Converts unit sizes to Kilobyte.
+.DESCRIPTION
+   This module converts a given unit size to Kilobyte.
+   e.g byte to Kilobyte.
+
+   More Information on https://github.com/Icinga/icinga-powershell-framework
+.EXAMPLE
+   PS> ConvertTo-Kilobyte -Unit TB 200
+   200000000000
+.LINK
+   https://github.com/Icinga/icinga-powershell-framework
+.NOTES
+#>
+
+function ConvertTo-Kilobyte()
+{
+    param(
+        [single]$Value,
+        [string]$Unit
+    );
+
+    switch ($Unit) {
+        { 'B', 'Byte' -contains $_ } { $result = ($Value / [math]::Pow(10, 3)); $boolOption = $true; }
+        { 'KB', 'Kilobyte' -contains $_ } { $result = $Value; $boolOption = $true; }
+        { 'MB', 'Megabyte' -contains $_ } { $result = ($Value * [math]::Pow(10, 3)); $boolOption = $true; }
+        { 'GB', 'Gigabyte' -contains $_ } { $result = ($Value * [math]::Pow(10, 6)); $boolOption = $true; }
+        { 'TB', 'Terabyte' -contains $_ } { $result = ($Value * [math]::Pow(10, 9)); $boolOption = $true; }
+        { 'PB', 'Petabyte' -contains $_ } { $result = ($Value * [math]::Pow(10, 12)); $boolOption = $true; }
+        default {
+            if (-Not $boolOption) {
+                Exit-IcingaThrowException -ExceptionType 'Input' -ExceptionThrown $IcingaExceptions.Inputs.ConversionUnitMissing -Force;
+            }
+        }
+    }
+
+    return $result;
+}
+
+<#
+.SYNOPSIS
+   Converts unit sizes to Megabyte.
+.DESCRIPTION
+   This module converts a given unit size to Megabyte.
+   e.g byte to Megabyte.
+
+   More Information on https://github.com/Icinga/icinga-powershell-framework
+.EXAMPLE
+   PS> ConvertTo-Kilobyte -Unit TB 200
+   200000000
+.LINK
+   https://github.com/Icinga/icinga-powershell-framework
+.NOTES
+#>
+
+function ConvertTo-Megabyte()
+{
+    param(
+        [single]$Value,
+        [string]$Unit
+    );
+
+    switch ($Unit) {
+        { 'B', 'Byte' -contains $_ } { $result = ($Value / [math]::Pow(10, 6)); $boolOption = $true; }
+        { 'KB', 'Kilobyte' -contains $_ } { $result = ($Value / [math]::Pow(10, 3)); $boolOption = $true; }
+        { 'MB', 'Megabyte' -contains $_ } { $result = $Value; $boolOption = $true; }
+        { 'GB', 'Gigabyte' -contains $_ } { $result = ($Value * [math]::Pow(10, 3)); $boolOption = $true; }
+        { 'TB', 'Terabyte' -contains $_ } { $result = ($Value * [math]::Pow(10, 6)); $boolOption = $true; }
+        { 'PB', 'Petabyte' -contains $_ } { $result = ($Value * [math]::Pow(10, 9)); $boolOption = $true; }
+        default {
+            if (-Not $boolOption) {
+                Exit-IcingaThrowException -ExceptionType 'Input' -ExceptionThrown $IcingaExceptions.Inputs.ConversionUnitMissing -Force;
+            }
+        }
+    }
+
+    return $result;
+}
+
+<#
+.SYNOPSIS
+   Converts unit sizes to Gigabyte.
+.DESCRIPTION
+   This module converts a given unit size to Gigabyte.
+   e.g byte to Gigabyte.
+
+   More Information on https://github.com/Icinga/icinga-powershell-framework
+.EXAMPLE
+   PS> ConvertTo-Gigabyte -Unit TB 200
+   200000
+.LINK
+   https://github.com/Icinga/icinga-powershell-framework
+.NOTES
+#>
+
+function ConvertTo-Gigabyte()
+{
+    param(
+        [single]$Value,
+        [string]$Unit
+    );
+
+    switch ($Unit) {
+        { 'B', 'Byte' -contains $_ } { $result = ($Value / [math]::Pow(10, 9)); $boolOption = $true; }
+        { 'KB', 'Kilobyte' -contains $_ } { $result = ($Value / [math]::Pow(10, 6)); $boolOption = $true; }
+        { 'MB', 'Megabyte' -contains $_ } { $result = ($Value / [math]::Pow(10, 3)); $boolOption = $true; }
+        { 'GB', 'Gigabyte' -contains $_ } { $result = $Value; $boolOption = $true; }
+        { 'TB', 'Terabyte' -contains $_ } { $result = ($Value * [math]::Pow(10, 3)); $boolOption = $true; }
+        { 'PB', 'Petabyte' -contains $_ } { $result = ($Value * [math]::Pow(10, 6)); $boolOption = $true; }
+        default {
+            if (-Not $boolOption) {
+                Exit-IcingaThrowException -ExceptionType 'Input' -ExceptionThrown $IcingaExceptions.Inputs.ConversionUnitMissing -Force;
+            }
+        }
+    }
+
+    return $result;
+}
+
+<#
+.SYNOPSIS
+   Converts unit sizes to Terabyte.
+.DESCRIPTION
+   This module converts a given unit size to Terabyte.
+   e.g byte to Terabyte.
+
+   More Information on https://github.com/Icinga/icinga-powershell-framework
+.EXAMPLE
+   PS> ConvertTo-Terabyte -Unit GB 2000000
+   2000
+.LINK
+   https://github.com/Icinga/icinga-powershell-framework
+.NOTES
+#>
+
+function ConvertTo-Terabyte()
+{
+    param(
+        [single]$Value,
+        [string]$Unit
+    );
+
+    switch ($Unit) {
+        { 'B', 'Byte' -contains $_ } { $result = ($Value / [math]::Pow(10, 12)); $boolOption = $true; }
+        { 'KB', 'Kilobyte' -contains $_ } { $result = ($Value / [math]::Pow(10, 9)); $boolOption = $true; }
+        { 'MB', 'Megabyte' -contains $_ } { $result = ($Value / [math]::Pow(10, 6)); $boolOption = $true; }
+        { 'GB', 'Gigabyte' -contains $_ } { $result = ($Value / [math]::Pow(10, 3)); $boolOption = $true; }
+        { 'TB', 'Terabyte' -contains $_ } { $result = $Value; $boolOption = $true; }
+        { 'PB', 'Petabyte' -contains $_ } { $result = ($Value * [math]::Pow(10, 3)); $boolOption = $true; }
+        default {
+            if (-Not $boolOption) {
+                Exit-IcingaThrowException -ExceptionType 'Input' -ExceptionThrown $IcingaExceptions.Inputs.ConversionUnitMissing -Force;
+            }
+        }
+    }
+
+    return $result;
+}
+
+<#
+.SYNOPSIS
+   Converts unit sizes to Petabyte.
+.DESCRIPTION
+   This module converts a given unit size to Petabyte.
+   e.g byte to Petabyte.
+
+   More Information on https://github.com/Icinga/icinga-powershell-framework
+.EXAMPLE
+   PS> ConvertTo-Petabyte -Unit GB 2000000
+   2
+.LINK
+   https://github.com/Icinga/icinga-powershell-framework
+.NOTES
+#>
+
+function ConvertTo-Petabyte()
+{
+    param(
+        [single]$Value,
+        [string]$Unit
+    );
+
+    switch ($Unit) {
+        { 'B', 'Byte' -contains $_ } { $result = ($Value / [math]::Pow(10, 15)); $boolOption = $true; }
+        { 'KB', 'Kilobyte' -contains $_ } { $result = ($Value / [math]::Pow(10, 12)); $boolOption = $true; }
+        { 'MB', 'Megabyte' -contains $_ } { $result = ($Value / [math]::Pow(10, 9)); $boolOption = $true; }
+        { 'GB', 'Gigabyte' -contains $_ } { $result = ($Value / [math]::Pow(10, 6)); $boolOption = $true; }
+        { 'TB', 'Terabyte' -contains $_ } { $result = ($Value / [math]::Pow(10, 3)); $boolOption = $true; }
+        { 'PB', 'Petabyte' -contains $_ } { $result = $Value; $boolOption = $true; }
+        default {
+            if (-Not $boolOption) {
+                Exit-IcingaThrowException -ExceptionType 'Input' -ExceptionThrown $IcingaExceptions.Inputs.ConversionUnitMissing -Force;
+            }
+        }
+    }
+
+    return $result;
 }
 
 # Content from: icinga-powershell-framework\lib\core\tools\ConvertTo-Integer.psm1
@@ -405,145 +906,249 @@ function ConvertTo-Integer()
     return $Value;
 }
 
-# Content from: icinga-powershell-framework\lib\core\framework\Test-IcingaFrameworkConsoleOutput.psm1
+# Content from: icinga-powershell-framework\lib\core\tools\ConvertTo-Seconds.psm1
 <#
 .SYNOPSIS
-   Allows to test if console output can be written or not for this PowerShell session
+   Converts unit to seconds.
 .DESCRIPTION
-   Allows to test if console output can be written or not for this PowerShell session
-.FUNCTIONALITY
-   Allows to test if console output can be written or not for this PowerShell session
+   This module converts a given time unit to seconds.
+   e.g hours to seconds.
+
+   More Information on https://github.com/Icinga/icinga-powershell-framework
+
+.PARAMETER Value
+   Specify unit to be converted to seconds. Allowed units: ms, s, m, h, d, w, M, y
+   ms = miliseconds; s = seconds; m = minutes; h = hours; d = days; w = weeks; M = months; y = years;
+
+   Like 20d for 20 days.
 .EXAMPLE
-   PS>Enable-IcingaFrameworkConsoleOutput;
+   PS> ConvertTo-Seconds 30d
+   2592000
 .LINK
    https://github.com/Icinga/icinga-powershell-framework
+.NOTES
 #>
 
-function Test-IcingaFrameworkConsoleOutput()
+function ConvertTo-Seconds()
 {
-    if ($null -eq $global:Icinga) {
-        return $TRUE;
-    }
-
-    if ($global:Icinga.ContainsKey('DisableConsoleOutput') -eq $FALSE) {
-        return $TRUE;
-    }
-
-    return (-Not ($global:Icinga.DisableConsoleOutput));
-}
-
-# Content from: icinga-powershell-framework\lib\core\logging\Write-IcingaConsolePlain.psm1
-<#
-.SYNOPSIS
-   Default Cmdlet for printing plain messages to console
-.DESCRIPTION
-   Default Cmdlet for printing plain messages to console
-.FUNCTIONALITY
-   Default Cmdlet for printing plain messages to console
-.EXAMPLE
-   PS>Write-IcingaConsolePlain -Message 'Test message: {0}' -Objects 'Hello World';
-.PARAMETER Message
-   The message to print with {x} placeholdes replaced by content inside the Objects array. Replace x with the
-   number of the index from the objects array
-.PARAMETER Objects
-   An array of objects being added to a provided message. The index of the array position has to refer to the
-   message locations.
-.INPUTS
-   System.String
-.LINK
-   https://github.com/Icinga/icinga-powershell-framework
-#>
-
-function Write-IcingaConsolePlain()
-{
-    param (
-        [string]$Message,
-        [array]$Objects,
-        [ValidateSet('Default', 'Black', 'DarkBlue', 'DarkGreen', 'DarkCyan', 'DarkRed', 'DarkMagenta', 'DarkYellow', 'Gray', 'DarkGray', 'Blue', 'Green', 'Cyan', 'Red', 'Magenta', 'Yellow', 'White')]
-        [string]$ForeColor = 'Default'
+    param(
+        [string]$Value
     );
 
-    Write-IcingaConsoleOutput `
-        -Message $Message `
-        -Objects $Objects `
-        -ForeColor $ForeColor `
-        -Severity $null;
-}
+    if ([string]::IsNullOrEmpty($Value)) {
+        return $Value;
+    }
 
-# Content from: icinga-powershell-framework\lib\core\logging\Write-IcingaConsoleOutput.psm1
-<#
-.SYNOPSIS
-   Standardise console output and make handling of object conversion easier into messages
-   by using this standard function for displaying severity and log entries
-.DESCRIPTION
-   Standardised function to output console messages controlled by the arguments provided
-   for coloring, displaying severity and add objects into output messages
-.FUNCTIONALITY
-   Standardise console output and make handling of object conversion easier into messages
-   by using this standard function for displaying severity and log entries
-.EXAMPLE
-   PS>Write-IcingaConsoleOutput -Message 'Test message: {0}' -Objects 'Hello World' -ForeColor 'Green' -Severity 'Test';
-.PARAMETER Message
-   The message to print with {x} placeholdes replaced by content inside the Objects array. Replace x with the
-   number of the index from the objects array
-.PARAMETER Objects
-   An array of objects being added to a provided message. The index of the array position has to refer to the
-   message locations.
-.PARAMETER ForeColor
-   The color the severity name will be displayed in
-.PARAMETER Severity
-   The severity being displayed before the actual message. Leave empty to skip.
-.INPUTS
-   System.String
-.LINK
-   https://github.com/Icinga/icinga-powershell-framework
-#>
+    [string]$NumberPart = '';
+    [string]$UnitPart   = '';
+    [bool]$Negate       = $FALSE;
+    [bool]$hasUnit      = $FALSE;
 
-function Write-IcingaConsoleOutput()
-{
-    param (
-        [string]$Message,
-        [array]$Objects,
-        [ValidateSet('Default', 'Black', 'DarkBlue', 'DarkGreen', 'DarkCyan', 'DarkRed', 'DarkMagenta', 'DarkYellow', 'Gray', 'DarkGray', 'Blue', 'Green', 'Cyan', 'Red', 'Magenta', 'Yellow', 'White')]
-        [string]$ForeColor = 'Default',
-        [string]$Severity  = 'Notice'
+    foreach ($char in $Value.ToCharArray()) {
+        if ((Test-Numeric $char)) {
+            $NumberPart += $char;
+        } else {
+            if ($char -eq '-') {
+                $Negate = $TRUE;
+            } elseif ($char -eq '.' -Or $char -eq ',') {
+                $NumberPart += '.';
+            } else {
+                $UnitPart += $char;
+                $hasUnit = $TRUE;
+            }
+        }
+    }
+
+    if (-Not $hasUnit) {
+        return $Value;
+    }
+
+    [single]$ValueSplitted = $NumberPart;
+    $result                = 0;
+
+    if ($Negate) {
+        $ValueSplitted    *= -1;
+    }
+
+    [string]$errorMsg = (
+        [string]::Format('Invalid unit type "{0}" specified for convertion. Allowed units: ms, s, m, h, d, w, M, y', $UnitPart)
     );
 
-    if ((Test-IcingaFrameworkConsoleOutput) -eq $FALSE) {
-        return;
-    }
-
-    # Never write console output in case the Framework is running as daemon
-    if ($null -ne $global:IcingaDaemonData -And $null -ne $global:IcingaDaemonData.FrameworkRunningAsDaemon -And $global:IcingaDaemonData.FrameworkRunningAsDaemon -eq $TRUE) {
-        return;
-    }
-
-    $OutputMessage = $Message;
-    [int]$Index    = 0;
-
-    foreach ($entry in $Objects) {
-
-        $OutputMessage = $OutputMessage.Replace(
-            [string]::Format('{0}{1}{2}', '{', $Index, '}'),
-            $entry
-        );
-        $Index++;
-    }
-
-    if ([string]::IsNullOrEmpty($Severity) -eq $FALSE) {
-        Write-Host '[' -NoNewline;
-        Write-Host $Severity -NoNewline -ForegroundColor $ForeColor;
-        Write-Host ']: ' -NoNewline;
-        Write-Host $OutputMessage;
-
-        return;
-    }
-
-    if ($ForeColor -eq 'Default') {
-        Write-Host $OutputMessage;
+    if ($UnitPart -Match 'ms') {
+        $result = ($ValueSplitted / [math]::Pow(10, 3));
     } else {
-        Write-Host $OutputMessage -ForegroundColor $ForeColor;
+        if ($UnitPart.Length -gt 1) {
+            Throw $errorMsg;
+        }
+
+        switch ([int][char]$UnitPart) {
+            { 115 -contains $_ } { $result = $ValueSplitted; break; } # s
+            { 109 -contains $_ } { $result = $ValueSplitted * 60; break; } # m
+            { 104 -contains $_ } { $result = $ValueSplitted * 3600; break; } # h
+            { 100 -contains $_ } { $result = $ValueSplitted * 86400; break; } # d
+            { 119 -contains $_ } { $result = $ValueSplitted * 604800; break; } # w
+            { 77  -contains $_ } { $result = $ValueSplitted * 2592000; break; } # M
+            { 121 -contains $_ } { $result = $ValueSplitted * 31536000; break; } # y
+            default {
+                Throw $errorMsg;
+                break;
+            }
+        }
     }
+
+    return $result;
+}
+
+function ConvertTo-SecondsFromIcingaThresholds()
+{
+    param(
+        [string]$Threshold
+    );
+
+    [array]$Content    = $Threshold.Split(':');
+    [array]$NewContent = @();
+
+    foreach ($entry in $Content) {
+        $NewContent += (Get-IcingaThresholdsAsSeconds -Value $entry)
+    }
+
+    [string]$Value = [string]::Join(':', $NewContent);
+
+    if ([string]::IsNullOrEmpty($Value) -eq $FALSE -And $Value.Contains(':') -eq $FALSE) {
+        return [convert]::ToDouble($Value);
+    }
+
+    return $Value;
+}
+
+function Get-IcingaThresholdsAsSeconds()
+{
+    param(
+        [string]$Value
+    );
+
+    if ($Value.Contains('~')) {
+        $Value = $Value.Replace('~', '');
+        return [string]::Format('~{0}', (ConvertTo-Seconds $Value));
+    } elseif ($Value.Contains('@')) {
+        $Value = $Value.Replace('@', '');
+        return [string]::Format('@{0}', (ConvertTo-Seconds $Value));
+    }
+
+    return (ConvertTo-Seconds $Value);
+}
+
+# Content from: icinga-powershell-framework\lib\core\tools\Format-IcingaPerfDataLabel.psm1
+function Format-IcingaPerfDataLabel()
+{
+    param(
+        $PerfData
+    );
+
+    $Output = ((($PerfData) -Replace ' ', '_') -Replace '[\W]', '');
+
+    while ($Output.Contains('__')) {
+        $Output = $Output.Replace('__', '_');
+    }
+    # Remove all special characters and spaces on label names
+    return $Output;
+}
+
+# Content from: icinga-powershell-framework\lib\core\tools\Format-IcingaPerfDataValue.psm1
+function Format-IcingaPerfDataValue()
+{
+    param(
+        $PerfValue
+    );
+
+    if ((Test-Numeric $PerfValue) -eq $FALSE) {
+        return $PerfValue;
+    }
+
+    # Convert our value to a string and replace ',' with a '.' to allow Icinga to parse the output
+    # In addition, round every output to 6 digits
+    return (([string]([math]::round([decimal]$PerfValue, 6))).Replace(',', '.'));
+}
+
+# Content from: icinga-powershell-framework\lib\core\tools\Get-IcingaUnixTime.psm1
+function Get-IcingaUnixTime()
+{
+    param(
+        [switch]$Milliseconds = $FALSE
+    );
+
+    if ($Milliseconds) {
+        return ([int64](([DateTime]::UtcNow) - (Get-Date '1/1/1970')).TotalMilliseconds / 1000);
+    }
+
+    return [int][double]::Parse(
+        (Get-Date -UFormat %s -Date (Get-Date).ToUniversalTime())
+    );
+}
+
+# Content from: icinga-powershell-framework\lib\core\tools\New-IcingaNewLine.psm1
+function New-IcingaNewLine()
+{
+    return "`r`n";
+}
+
+# Content from: icinga-powershell-framework\lib\core\tools\New-StringTree.psm1
+function New-StringTree()
+{
+    param(
+        [int]$Spacing
+    )
+
+    if ($Spacing -eq 0) {
+        return '';
+    }
+
+    [string]$spaces = '\_ ';
+
+    while ($Spacing -gt 1) {
+        $Spacing -= 1;
+        $spaces = '   ' + $spaces;
+    }
+
+    return $spaces;
+}
+
+# Content from: icinga-powershell-framework\lib\core\tools\Test-Numeric.psm1
+<#
+.SYNOPSIS
+   Tests whether a value is numeric
+.DESCRIPTION
+   This module tests whether a value is numeric
+
+   More Information on https://github.com/Icinga/icinga-powershell-framework
+.EXAMPLE
+   PS> Test-Numeric 32
+   True
+.LINK
+   https://github.com/Icinga/icinga-powershell-framework
+.NOTES
+#>
+function Test-Numeric ($number) {
+    return $number -Match "^[\d\.]+$";
+}
+
+# Content from: icinga-powershell-framework\lib\core\tools\Test-Numeric.psm1
+<#
+.SYNOPSIS
+   Tests whether a value is numeric
+.DESCRIPTION
+   This module tests whether a value is numeric
+
+   More Information on https://github.com/Icinga/icinga-powershell-framework
+.EXAMPLE
+   PS> Test-Numeric 32
+   True
+.LINK
+   https://github.com/Icinga/icinga-powershell-framework
+.NOTES
+#>
+function Test-Numeric ($number) {
+    return $number -Match "^[\d\.]+$";
 }
 
 # Content from: icinga-powershell-framework\lib\icinga\enums\Icinga_IcingaEnums.psm1
@@ -628,487 +1233,111 @@ function Write-IcingaConsoleOutput()
     }
 }
 
-# Content from: icinga-powershell-framework\lib\icinga\plugin\New-IcingaCheckPackage.psm1
-function New-IcingaCheckPackage()
+# Content from: icinga-powershell-framework\lib\icinga\exception\Exit-IcingaThrowException.psm1
+function Exit-IcingaThrowException()
 {
     param(
-        [string]$Name,
-        [switch]$OperatorAnd,
-        [switch]$OperatorOr,
-        [switch]$OperatorNone,
-        [int]$OperatorMin           = -1,
-        [int]$OperatorMax           = -1,
-        [array]$Checks              = @(),
-        [int]$Verbose               = 0,
-        [switch]$IgnoreEmptyPackage = $FALSE,
-        [switch]$Hidden             = $FALSE
+        [string]$InputString,
+        [string]$StringPattern,
+        [string]$CustomMessage,
+        $ExceptionThrown,
+        [ValidateSet('Permission', 'Input', 'Configuration', 'Connection', 'Unhandled', 'Custom')]
+        [string]$ExceptionType    = 'Unhandled',
+        [string]$KnowledgeBaseId,
+        [switch]$Force
     );
 
-    $Check = New-Object -TypeName PSObject;
-    $Check | Add-Member -MemberType NoteProperty -Name 'name'               -Value $Name;
-    $Check | Add-Member -MemberType NoteProperty -Name 'exitcode'           -Value -1;
-    $Check | Add-Member -MemberType NoteProperty -Name 'verbose'            -Value $Verbose;
-    $Check | Add-Member -MemberType NoteProperty -Name 'hidden'             -Value $Hidden;
-    $Check | Add-Member -MemberType NoteProperty -Name 'ignoreemptypackage' -Value $IgnoreEmptyPackage;
-    $Check | Add-Member -MemberType NoteProperty -Name 'checks'             -Value $Checks;
-    $Check | Add-Member -MemberType NoteProperty -Name 'opand'              -Value $OperatorAnd;
-    $Check | Add-Member -MemberType NoteProperty -Name 'opor'               -Value $OperatorOr;
-    $Check | Add-Member -MemberType NoteProperty -Name 'opnone'             -Value $OperatorNone;
-    $Check | Add-Member -MemberType NoteProperty -Name 'opmin'              -Value $OperatorMin;
-    $Check | Add-Member -MemberType NoteProperty -Name 'opmax'              -Value $OperatorMax;
-    $Check | Add-Member -MemberType NoteProperty -Name 'spacing'            -Value 0;
-    $Check | Add-Member -MemberType NoteProperty -Name 'compiled'           -Value $FALSE;
-    $Check | Add-Member -MemberType NoteProperty -Name 'perfdata'           -Value $FALSE;
-    $Check | Add-Member -MemberType NoteProperty -Name 'checkcommand'       -Value '';
-    $Check | Add-Member -MemberType NoteProperty -Name 'headermsg'          -Value '';
-    $Check | Add-Member -MemberType NoteProperty -Name 'checkpackage'       -Value $TRUE;
-    $Check | Add-Member -MemberType NoteProperty -Name 'warningchecks'      -Value @();
-    $Check | Add-Member -MemberType NoteProperty -Name 'criticalchecks'     -Value @();
-    $Check | Add-Member -MemberType NoteProperty -Name 'unknownchecks'      -Value @();
-
-    $Check | Add-Member -MemberType ScriptMethod -Name 'HasChecks' -Value {
-        if ($this.checks -ne 0) {
-            return $TRUE
-        }
-
-        return $FALSE;
-    }
-
-    $Check | Add-Member -MemberType ScriptMethod -Name 'Initialise' -Value {
-        foreach ($check in $this.checks) {
-            $this.InitCheck($check);
-        }
-    }
-
-    $Check | Add-Member -MemberType ScriptMethod -Name 'InitCheck' -Value {
-        param($check);
-
-        if ($null -eq $check) {
+    if ($Force -eq $FALSE) {
+        if ($null -eq $InputString -Or [string]::IsNullOrEmpty($InputString)) {
             return;
         }
 
-        $check.verbose = $this.verbose;
-        $check.AddSpacing();
-        $check.SilentCompile();
-    }
-
-    $Check | Add-Member -MemberType ScriptMethod -Name 'AddSpacing' -Value {
-        $this.spacing += 1;
-        foreach ($check in $this.checks) {
-            $check.spacing = $this.spacing;
-            $check.AddSpacing();
-        }
-    }
-
-    $Check | Add-Member -MemberType ScriptMethod -Name 'AddCheck' -Value {
-        param($check);
-
-        if ($null -eq $check) {
-            return;
-        }
-
-        $this.InitCheck($check);
-        $this.checks += $check;
-    }
-
-    $Check | Add-Member -MemberType ScriptMethod -Name 'GetWarnings' -Value {
-        foreach ($check in $this.checks) {
-            $this.warningchecks += $check.GetWarnings();
-        }
-
-        return $this.warningchecks;
-    }
-
-    $Check | Add-Member -MemberType ScriptMethod -Name 'GetCriticals' -Value {
-        foreach ($check in $this.checks) {
-            $this.criticalchecks += $check.GetCriticals();
-        }
-
-        return $this.criticalchecks;
-    }
-
-    $Check | Add-Member -MemberType ScriptMethod -Name 'GetUnknowns' -Value {
-        foreach ($check in $this.checks) {
-            $this.unknownchecks += $check.GetUnknowns();
-        }
-
-        return $this.unknownchecks;
-    }
-
-    $Check | Add-Member -MemberType ScriptMethod -Name 'AssignCheckCommand' -Value {
-        param($CheckCommand);
-
-        $this.checkcommand = $CheckCommand;
-
-        foreach ($check in $this.checks) {
-            $check.AssignCheckCommand($CheckCommand);
-        }
-    }
-
-    $Check | Add-Member -MemberType ScriptMethod -Name 'Compile' -Value {
-        param([bool]$Verbose);
-
-        if ($this.compiled) {
-            return;
-        }
-
-        $this.compiled = $TRUE;
-
-        if ($this.checks.Count -ne 0) {
-            if ($this.opand) {
-                if ($this.CheckAllOk() -eq $FALSE) {
-                    $this.GetWorstExitCode();
-                }
-            } elseif ($this.opor) {
-                if ($this.CheckOneOk() -eq $FALSE) {
-                    $this.GetWorstExitCode();
-                }
-            } elseif ($this.opnone) {
-                if ($this.CheckOneOk() -eq $TRUE) {
-                    $this.GetWorstExitCode();
-                    $this.exitcode = $IcingaEnums.IcingaExitCode.Critical;
-                } else {
-                    $this.exitcode = $IcingaEnums.IcingaExitCode.Ok;
-                }
-            } elseif ([int]$this.opmin -ne -1) {
-                if ($this.CheckMinimumOk() -eq $FALSE) {
-                    $this.GetWorstExitCode();
-                } else {
-                    $this.exitcode = $IcingaEnums.IcingaExitCode.Ok;
-                }
-            } elseif ([int]$this.opmax -ne -1) {
-                if ($this.CheckMaximumOk() -eq $FALSE) {
-                    $this.GetWorstExitCode();
-                } else {
-                    $this.exitcode = $IcingaEnums.IcingaExitCode.Ok;
-                }
-            }
-        } else {
-            if ($this.ignoreemptypackage) {
-                $this.exitcode = $IcingaEnums.IcingaExitCode.Ok;
-            } else {
-                $this.exitcode = $IcingaEnums.IcingaExitCode.Unknown;
-            }
-        }
-
-        if ([int]$this.exitcode -eq -1) {
-            $this.exitcode = $IcingaEnums.IcingaExitCode.Ok;
-        }
-
-        if ($Verbose -eq $TRUE) {
-            $this.PrintOutputMessages();
-        }
-
-        return $this.exitcode;
-    }
-
-    $Check | Add-Member -MemberType ScriptMethod -Name 'SilentCompile' -Value {
-        $this.Compile($FALSE) | Out-Null;
-    }
-
-    $Check | Add-Member -MemberType ScriptMethod -Name 'GetOkCount' -Value {
-        [int]$okCount = 0;
-        foreach ($check in $this.checks) {
-            if ([int]$check.exitcode -eq [int]$IcingaEnums.IcingaExitCode.Ok) {
-                $okCount += 1;
-            }
-        }
-
-        return $okCount;
-    }
-
-    $Check | Add-Member -MemberType ScriptMethod -Name 'CheckMinimumOk' -Value {
-        if ($this.opmin -gt $this.checks.Count) {
-            Write-IcingaPluginOutput (
-                [string]::Format(
-                    'Unknown: The minimum argument ({0}) is exceeding the amount of assigned checks ({1}) to this package "{2}"',
-                    $this.opmin, $this.checks.Count, $this.name
-                )
-            );
-            $this.exitcode = $IcingaEnums.IcingaExitCode.Unknown;
-            return $FALSE;
-        }
-
-        [int]$okCount = $this.GetOkCount();
-
-        if ($this.opmin -le $okCount) {
-            return $TRUE;
-        }
-
-        return $FALSE;
-    }
-
-    $Check | Add-Member -MemberType ScriptMethod -Name 'CheckMaximumOk' -Value {
-        if ($this.opmax -gt $this.checks.Count) {
-            Write-IcingaPluginOutput (
-                [string]::Format(
-                    'Unknown: The maximum argument ({0}) is exceeding the amount of assigned checks ({1}) to this package "{2}"',
-                    $this.opmax, $this.checks.Count, $this.name
-                )
-            );
-            $this.exitcode = $IcingaEnums.IcingaExitCode.Unknown;
-            return $FALSE;
-        }
-
-        [int]$okCount = $this.GetOkCount();
-
-        if ($this.opmax -ge $okCount) {
-            return $TRUE;
-        }
-
-        return $FALSE;
-    }
-
-    $Check | Add-Member -MemberType ScriptMethod -Name 'CheckAllOk' -Value {
-        foreach ($check in $this.checks) {
-            if ([int]$check.exitcode -ne [int]$IcingaEnums.IcingaExitCode.Ok) {
-                return $FALSE;
-            }
-        }
-
-        return $TRUE;
-    }
-
-    $Check | Add-Member -MemberType ScriptMethod -Name 'CheckOneOk' -Value {
-        foreach ($check in $this.checks) {
-            if ([int]$check.exitcode -eq [int]$IcingaEnums.IcingaExitCode.Ok) {
-                $this.exitcode = $check.exitcode;
-                return $TRUE;
-            }
-        }
-
-        return $FALSE;
-    }
-
-    $Check | Add-Member -MemberType ScriptMethod -Name 'GetPackageConfigMessage' -Value {
-        if ($this.opand) {
-            return 'Match All';
-        } elseif ($this.opor) {
-            return 'Match Any';
-        } elseif ($this.opnone) {
-            return 'Match None';
-        } elseif ([int]$this.opmin -ne -1) {
-            return [string]::Format('Minimum {0}', $this.opmin)
-        } elseif ([int]$this.opmax -ne -1) {
-            return [string]::Format('Maximum {0}', $this.opmax)
-        }
-    }
-
-    $Check | Add-Member -MemberType ScriptMethod -Name 'PrintOutputMessageSorted' -Value {
-        param($skipHidden, $skipExitCode);
-
-        if ($this.hidden -And $skipHidden) {
-            return;
-        }
-
-        [hashtable]$MessageOrdering = @{};
-        foreach ($check in $this.checks) {
-            if ($this.verbose -eq 0) {
-                if ([int]$check.exitcode -eq $skipExitCode) {
-                    continue;
-                }
-            } elseif ($this.verbose -eq 1) {
-                if ([int]$check.exitcode -eq $skipExitCode -And $check.checkpackage) {
-                    continue;
-                }
-            }
-
-            if ($MessageOrdering.ContainsKey($check.Name) -eq $FALSE) {
-                $MessageOrdering.Add($check.name, $check);
-            } else {
-                [int]$DuplicateKeyIndex = 1;
-                while ($TRUE) {
-                    $newCheckName = [string]::Format('{0}[{1}]', $check.Name, $DuplicateKeyIndex);
-                    if ($MessageOrdering.ContainsKey($newCheckName) -eq $FALSE) {
-                        $MessageOrdering.Add($newCheckName, $check);
-                        break;
-                    }
-                    $DuplicateKeyIndex += 1;
-                }
-            }
-        }
-
-        $SortedArray = $MessageOrdering.GetEnumerator() | Sort-Object name;
-
-        foreach ($entry in $SortedArray) {
-            $entry.Value.PrintAllMessages();
-        }
-    }
-
-    $Check | Add-Member -MemberType ScriptMethod -Name 'WriteAllOutput' -Value {
-        $this.PrintOutputMessageSorted($TRUE, $IcingaEnums.IcingaExitCode.Ok);
-    }
-
-    $Check | Add-Member -MemberType ScriptMethod -Name 'PrintAllMessages' -Value {
-        $this.WritePackageOutputStatus();
-        $this.WriteAllOutput();
-    }
-
-    $Check | Add-Member -MemberType ScriptMethod -Name 'WriteCheckErrors' -Value {
-        $this.PrintOutputMessageSorted($FALSE, $IcingaEnums.IcingaExitCode.Ok);
-    }
-
-    $Check | Add-Member -MemberType ScriptMethod -Name 'PrintNoChecksConfigured' -Value {
-        if ($this.checks.Count -eq 0) {
-            Write-IcingaPluginOutput (
-                [string]::Format(
-                    '{0}{1} No checks configured for package "{2}"',
-                    (New-StringTree ($this.spacing + 1)),
-                    $IcingaEnums.IcingaExitCodeText.($this.exitcode),
-                    $this.name
-                )
-            )
+        if (-Not $InputString.Contains($StringPattern)) {
             return;
         }
     }
 
-    $Check | Add-Member -MemberType ScriptMethod -Name 'WritePackageOutputStatus' -Value {
-        if ($this.hidden) {
-            return;
-        }
+    $ExceptionMessageLib = $null;
+    $ExceptionTypeString = '';
 
-        [string]$outputMessage = '{0}{1} Check package "{2}"';
-        if ($this.verbose -ne 0) {
-            $outputMessage += ' ({3})';
-        }
-
-        if ($this.exitcode -ne 0 -And $this.spacing -eq 0) {
-            $outputMessage += ' - {4}';
-        }
-
-        Write-IcingaPluginOutput (
-            [string]::Format(
-                $outputMessage,
-                (New-StringTree $this.spacing),
-                $IcingaEnums.IcingaExitCodeText.($this.exitcode),
-                $this.name,
-                $this.GetPackageConfigMessage(),
-                $this.headermsg
-            )
-        );
+    switch ($ExceptionType) {
+        'Permission' {
+            $ExceptionTypeString = 'Permission';
+            $ExceptionMessageLib = $IcingaExceptions.Permission;
+        };
+        'Input' {
+            $ExceptionTypeString = 'Invalid Input';
+            $ExceptionMessageLib = $IcingaExceptions.Inputs;
+        };
+        'Configuration' {
+            $ExceptionTypeString = 'Invalid Configuration';
+            $ExceptionMessageLib = $IcingaExceptions.Configuration;
+        };
+        'Connection' {
+            $ExceptionTypeString = 'Connection error';
+            $ExceptionMessageLib = $IcingaExceptions.Connection;
+        };
+        'Unhandled' {
+            $ExceptionTypeString = 'Unhandled';
+        };
+        'Custom' {
+            $ExceptionTypeString = 'Custom';
+        };
     }
 
-    $Check | Add-Member -MemberType ScriptMethod -Name 'PrintOutputMessages' -Value {
-        [bool]$printAll = $FALSE;
+    [string]$ExceptionName = '';
+    [string]$ExceptionIWKB = $KnowledgeBaseId;
 
-        switch ($this.verbose) {
-            0 {
-                # Default value. Only print a package but not the services include
-                break;
-            };
-            1 {
-                # Include the Operator into the check package result and OK checks of package
-                break;
-            };
-            Default {
-                $printAll = $TRUE;
+    if ($null -ne $ExceptionMessageLib) {
+        foreach ($definedError in $ExceptionMessageLib.Keys) {
+            if ($ExceptionMessageLib.$definedError -eq $ExceptionThrown) {
+                $ExceptionName = $definedError;
                 break;
             }
         }
-
-        $this.WritePackageOutputStatus();
-
-        if ($printAll) {
-            $this.WriteAllOutput();
-            $this.PrintNoChecksConfigured();
-        } else {
-            if ([int]$this.exitcode -ne $IcingaEnums.IcingaExitCode.Ok) {
-                $this.WriteCheckErrors();
-                $this.PrintNoChecksConfigured();
-            }
-        }
-    }
-
-    $Check | Add-Member -MemberType ScriptMethod -Name 'AddUniqueSortedChecksToHeader' -Value {
-        param($checkarray, $state);
-
-        [hashtable]$CheckHash = @{};
-
-        foreach ($entry in $checkarray) {
-            if ($CheckHash.ContainsKey($entry) -eq $FALSE) {
-                $CheckHash.Add($entry, $TRUE);
-            }
-        }
-
-        [array]$SortedCheckArray = $CheckHash.GetEnumerator() | Sort-Object name;
-
-        if ($SortedCheckArray.Count -ne 0) {
-            $this.headermsg += [string]::Format(
-                '{0} {1} ',
-                $IcingaEnums.IcingaExitCodeText[$state],
-                [string]::Join(', ', $SortedCheckArray.Key)
-            );
-        }
-    }
-
-    $Check | Add-Member -MemberType ScriptMethod -Name 'GetWorstExitCode' -Value {
-        if ([int]$this.exitcode -eq [int]$IcingaEnums.IcingaExitCode.Unknown) {
-            return;
-        }
-
-        foreach ($check in $this.checks) {
-            if ([int]$this.exitcode -lt $check.exitcode) {
-                $this.exitcode = $check.exitcode;
-            }
-
-            $this.criticalchecks += $check.GetCriticals();
-            $this.warningchecks  += $check.GetWarnings();
-            $this.unknownchecks  += $check.GetUnknowns();
-        }
-
-        # Only apply this to our top package
-        if ($this.spacing -ne 0) {
-            return;
-        }
-
-        $this.AddUniqueSortedChecksToHeader(
-            $this.criticalchecks, $IcingaEnums.IcingaExitCode.Critical
-        );
-        $this.AddUniqueSortedChecksToHeader(
-            $this.warningchecks, $IcingaEnums.IcingaExitCode.Warning
-        );
-        $this.AddUniqueSortedChecksToHeader(
-            $this.unknownchecks, $IcingaEnums.IcingaExitCode.Unknown
+    } else {
+        $ExceptionName   = [string]::Format('{0} Exception', $ExceptionTypeString);
+        $ExceptionThrown = [string]::Format(
+            '{0} exception occured:{1}{2}',
+            $ExceptionTypeString,
+            "`r`n",
+            $InputString
         );
     }
 
-    $Check | Add-Member -MemberType ScriptMethod -Name 'GetPerfData' -Value {
-        [string]$perfData             = '';
-        [hashtable]$CollectedPerfData = @{};
-
-        # At first lets collect all perf data, but ensure we only add possible label duplication only once
-        foreach ($check in $this.checks) {
-            $data = $check.GetPerfData();
-
-            if ($null -eq $data -Or $null -eq $data.label) {
-                continue;
-            }
-
-            if ($CollectedPerfData.ContainsKey($data.label)) {
-                continue;
-            }
-
-            $CollectedPerfData.Add($data.label, $data);
-        }
-
-        # Now sort the label output by name
-        $SortedArray = $CollectedPerfData.GetEnumerator() | Sort-Object name;
-
-        # Buold the performance data output based on the sorted result
-        foreach ($entry in $SortedArray) {
-            $perfData += $entry.Value;
-        }
-
-        return @{
-            'label'    = $this.name;
-            'perfdata' = $CollectedPerfData;
-            'package'  = $TRUE;
-        }
+    if ($ExceptionThrown -is [hashtable]) {
+        $ExceptionIWKB   = $ExceptionThrown.IWKB;
+        $ExceptionThrown = $ExceptionThrown.Message;
     }
 
-    $Check.Initialise();
+    if ([string]::IsNullOrEmpty($ExceptionIWKB) -eq $FALSE) {
+        $ExceptionIWKB = [string]::Format(
+            '{0}{0}Further details can be found on the Icinga for Windows Knowledge base: https://icinga.com/docs/windows/latest/doc/knowledgebase/{1}',
+            (New-IcingaNewLine),
+            $ExceptionIWKB
+        );
+    }
 
-    return $Check;
+    $OutputMessage = '{0}: Icinga {6} Error was thrown: {4}: {5}{2}{2}{3}{1}';
+    if ([string]::IsNullOrEmpty($CustomMessage) -eq $TRUE) {
+        $OutputMessage = '{0}: Icinga {6} Error was thrown: {4}{2}{2}{3}{5}{1}';
+    }
+
+    $OutputMessage = [string]::Format(
+        $OutputMessage,
+        $IcingaEnums.IcingaExitCodeText.($IcingaEnums.IcingaExitCode.Unknown),
+        $ExceptionIWKB,
+        (New-IcingaNewLine),
+        $ExceptionThrown,
+        $ExceptionName,
+        $CustomMessage,
+        $ExceptionTypeString
+    );
+
+    if ($null -eq $global:IcingaDaemonData -Or $global:IcingaDaemonData.FrameworkRunningAsDaemon -eq $FALSE) {
+        Write-IcingaConsolePlain $OutputMessage;
+        exit $IcingaEnums.IcingaExitCode.Unknown;
+    }
 }
 
 # Content from: icinga-powershell-framework\lib\icinga\plugin\New-IcingaCheck.psm1
@@ -1962,6 +2191,489 @@ function New-IcingaCheck()
 
     $Check.ValidateUnit();
     $Check.HandleDaemon();
+
+    return $Check;
+}
+
+# Content from: icinga-powershell-framework\lib\icinga\plugin\New-IcingaCheckPackage.psm1
+function New-IcingaCheckPackage()
+{
+    param(
+        [string]$Name,
+        [switch]$OperatorAnd,
+        [switch]$OperatorOr,
+        [switch]$OperatorNone,
+        [int]$OperatorMin           = -1,
+        [int]$OperatorMax           = -1,
+        [array]$Checks              = @(),
+        [int]$Verbose               = 0,
+        [switch]$IgnoreEmptyPackage = $FALSE,
+        [switch]$Hidden             = $FALSE
+    );
+
+    $Check = New-Object -TypeName PSObject;
+    $Check | Add-Member -MemberType NoteProperty -Name 'name'               -Value $Name;
+    $Check | Add-Member -MemberType NoteProperty -Name 'exitcode'           -Value -1;
+    $Check | Add-Member -MemberType NoteProperty -Name 'verbose'            -Value $Verbose;
+    $Check | Add-Member -MemberType NoteProperty -Name 'hidden'             -Value $Hidden;
+    $Check | Add-Member -MemberType NoteProperty -Name 'ignoreemptypackage' -Value $IgnoreEmptyPackage;
+    $Check | Add-Member -MemberType NoteProperty -Name 'checks'             -Value $Checks;
+    $Check | Add-Member -MemberType NoteProperty -Name 'opand'              -Value $OperatorAnd;
+    $Check | Add-Member -MemberType NoteProperty -Name 'opor'               -Value $OperatorOr;
+    $Check | Add-Member -MemberType NoteProperty -Name 'opnone'             -Value $OperatorNone;
+    $Check | Add-Member -MemberType NoteProperty -Name 'opmin'              -Value $OperatorMin;
+    $Check | Add-Member -MemberType NoteProperty -Name 'opmax'              -Value $OperatorMax;
+    $Check | Add-Member -MemberType NoteProperty -Name 'spacing'            -Value 0;
+    $Check | Add-Member -MemberType NoteProperty -Name 'compiled'           -Value $FALSE;
+    $Check | Add-Member -MemberType NoteProperty -Name 'perfdata'           -Value $FALSE;
+    $Check | Add-Member -MemberType NoteProperty -Name 'checkcommand'       -Value '';
+    $Check | Add-Member -MemberType NoteProperty -Name 'headermsg'          -Value '';
+    $Check | Add-Member -MemberType NoteProperty -Name 'checkpackage'       -Value $TRUE;
+    $Check | Add-Member -MemberType NoteProperty -Name 'warningchecks'      -Value @();
+    $Check | Add-Member -MemberType NoteProperty -Name 'criticalchecks'     -Value @();
+    $Check | Add-Member -MemberType NoteProperty -Name 'unknownchecks'      -Value @();
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'HasChecks' -Value {
+        if ($this.checks -ne 0) {
+            return $TRUE
+        }
+
+        return $FALSE;
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'Initialise' -Value {
+        foreach ($check in $this.checks) {
+            $this.InitCheck($check);
+        }
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'InitCheck' -Value {
+        param($check);
+
+        if ($null -eq $check) {
+            return;
+        }
+
+        $check.verbose = $this.verbose;
+        $check.AddSpacing();
+        $check.SilentCompile();
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'AddSpacing' -Value {
+        $this.spacing += 1;
+        foreach ($check in $this.checks) {
+            $check.spacing = $this.spacing;
+            $check.AddSpacing();
+        }
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'AddCheck' -Value {
+        param($check);
+
+        if ($null -eq $check) {
+            return;
+        }
+
+        $this.InitCheck($check);
+        $this.checks += $check;
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'GetWarnings' -Value {
+        foreach ($check in $this.checks) {
+            $this.warningchecks += $check.GetWarnings();
+        }
+
+        return $this.warningchecks;
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'GetCriticals' -Value {
+        foreach ($check in $this.checks) {
+            $this.criticalchecks += $check.GetCriticals();
+        }
+
+        return $this.criticalchecks;
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'GetUnknowns' -Value {
+        foreach ($check in $this.checks) {
+            $this.unknownchecks += $check.GetUnknowns();
+        }
+
+        return $this.unknownchecks;
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'AssignCheckCommand' -Value {
+        param($CheckCommand);
+
+        $this.checkcommand = $CheckCommand;
+
+        foreach ($check in $this.checks) {
+            $check.AssignCheckCommand($CheckCommand);
+        }
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'Compile' -Value {
+        param([bool]$Verbose);
+
+        if ($this.compiled) {
+            return;
+        }
+
+        $this.compiled = $TRUE;
+
+        if ($this.checks.Count -ne 0) {
+            if ($this.opand) {
+                if ($this.CheckAllOk() -eq $FALSE) {
+                    $this.GetWorstExitCode();
+                }
+            } elseif ($this.opor) {
+                if ($this.CheckOneOk() -eq $FALSE) {
+                    $this.GetWorstExitCode();
+                }
+            } elseif ($this.opnone) {
+                if ($this.CheckOneOk() -eq $TRUE) {
+                    $this.GetWorstExitCode();
+                    $this.exitcode = $IcingaEnums.IcingaExitCode.Critical;
+                } else {
+                    $this.exitcode = $IcingaEnums.IcingaExitCode.Ok;
+                }
+            } elseif ([int]$this.opmin -ne -1) {
+                if ($this.CheckMinimumOk() -eq $FALSE) {
+                    $this.GetWorstExitCode();
+                } else {
+                    $this.exitcode = $IcingaEnums.IcingaExitCode.Ok;
+                }
+            } elseif ([int]$this.opmax -ne -1) {
+                if ($this.CheckMaximumOk() -eq $FALSE) {
+                    $this.GetWorstExitCode();
+                } else {
+                    $this.exitcode = $IcingaEnums.IcingaExitCode.Ok;
+                }
+            }
+        } else {
+            if ($this.ignoreemptypackage) {
+                $this.exitcode = $IcingaEnums.IcingaExitCode.Ok;
+            } else {
+                $this.exitcode = $IcingaEnums.IcingaExitCode.Unknown;
+            }
+        }
+
+        if ([int]$this.exitcode -eq -1) {
+            $this.exitcode = $IcingaEnums.IcingaExitCode.Ok;
+        }
+
+        if ($Verbose -eq $TRUE) {
+            $this.PrintOutputMessages();
+        }
+
+        return $this.exitcode;
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'SilentCompile' -Value {
+        $this.Compile($FALSE) | Out-Null;
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'GetOkCount' -Value {
+        [int]$okCount = 0;
+        foreach ($check in $this.checks) {
+            if ([int]$check.exitcode -eq [int]$IcingaEnums.IcingaExitCode.Ok) {
+                $okCount += 1;
+            }
+        }
+
+        return $okCount;
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'CheckMinimumOk' -Value {
+        if ($this.opmin -gt $this.checks.Count) {
+            Write-IcingaPluginOutput (
+                [string]::Format(
+                    'Unknown: The minimum argument ({0}) is exceeding the amount of assigned checks ({1}) to this package "{2}"',
+                    $this.opmin, $this.checks.Count, $this.name
+                )
+            );
+            $this.exitcode = $IcingaEnums.IcingaExitCode.Unknown;
+            return $FALSE;
+        }
+
+        [int]$okCount = $this.GetOkCount();
+
+        if ($this.opmin -le $okCount) {
+            return $TRUE;
+        }
+
+        return $FALSE;
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'CheckMaximumOk' -Value {
+        if ($this.opmax -gt $this.checks.Count) {
+            Write-IcingaPluginOutput (
+                [string]::Format(
+                    'Unknown: The maximum argument ({0}) is exceeding the amount of assigned checks ({1}) to this package "{2}"',
+                    $this.opmax, $this.checks.Count, $this.name
+                )
+            );
+            $this.exitcode = $IcingaEnums.IcingaExitCode.Unknown;
+            return $FALSE;
+        }
+
+        [int]$okCount = $this.GetOkCount();
+
+        if ($this.opmax -ge $okCount) {
+            return $TRUE;
+        }
+
+        return $FALSE;
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'CheckAllOk' -Value {
+        foreach ($check in $this.checks) {
+            if ([int]$check.exitcode -ne [int]$IcingaEnums.IcingaExitCode.Ok) {
+                return $FALSE;
+            }
+        }
+
+        return $TRUE;
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'CheckOneOk' -Value {
+        foreach ($check in $this.checks) {
+            if ([int]$check.exitcode -eq [int]$IcingaEnums.IcingaExitCode.Ok) {
+                $this.exitcode = $check.exitcode;
+                return $TRUE;
+            }
+        }
+
+        return $FALSE;
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'GetPackageConfigMessage' -Value {
+        if ($this.opand) {
+            return 'Match All';
+        } elseif ($this.opor) {
+            return 'Match Any';
+        } elseif ($this.opnone) {
+            return 'Match None';
+        } elseif ([int]$this.opmin -ne -1) {
+            return [string]::Format('Minimum {0}', $this.opmin)
+        } elseif ([int]$this.opmax -ne -1) {
+            return [string]::Format('Maximum {0}', $this.opmax)
+        }
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'PrintOutputMessageSorted' -Value {
+        param($skipHidden, $skipExitCode);
+
+        if ($this.hidden -And $skipHidden) {
+            return;
+        }
+
+        [hashtable]$MessageOrdering = @{};
+        foreach ($check in $this.checks) {
+            if ($this.verbose -eq 0) {
+                if ([int]$check.exitcode -eq $skipExitCode) {
+                    continue;
+                }
+            } elseif ($this.verbose -eq 1) {
+                if ([int]$check.exitcode -eq $skipExitCode -And $check.checkpackage) {
+                    continue;
+                }
+            }
+
+            if ($MessageOrdering.ContainsKey($check.Name) -eq $FALSE) {
+                $MessageOrdering.Add($check.name, $check);
+            } else {
+                [int]$DuplicateKeyIndex = 1;
+                while ($TRUE) {
+                    $newCheckName = [string]::Format('{0}[{1}]', $check.Name, $DuplicateKeyIndex);
+                    if ($MessageOrdering.ContainsKey($newCheckName) -eq $FALSE) {
+                        $MessageOrdering.Add($newCheckName, $check);
+                        break;
+                    }
+                    $DuplicateKeyIndex += 1;
+                }
+            }
+        }
+
+        $SortedArray = $MessageOrdering.GetEnumerator() | Sort-Object name;
+
+        foreach ($entry in $SortedArray) {
+            $entry.Value.PrintAllMessages();
+        }
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'WriteAllOutput' -Value {
+        $this.PrintOutputMessageSorted($TRUE, $IcingaEnums.IcingaExitCode.Ok);
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'PrintAllMessages' -Value {
+        $this.WritePackageOutputStatus();
+        $this.WriteAllOutput();
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'WriteCheckErrors' -Value {
+        $this.PrintOutputMessageSorted($FALSE, $IcingaEnums.IcingaExitCode.Ok);
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'PrintNoChecksConfigured' -Value {
+        if ($this.checks.Count -eq 0) {
+            Write-IcingaPluginOutput (
+                [string]::Format(
+                    '{0}{1} No checks configured for package "{2}"',
+                    (New-StringTree ($this.spacing + 1)),
+                    $IcingaEnums.IcingaExitCodeText.($this.exitcode),
+                    $this.name
+                )
+            )
+            return;
+        }
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'WritePackageOutputStatus' -Value {
+        if ($this.hidden) {
+            return;
+        }
+
+        [string]$outputMessage = '{0}{1} Check package "{2}"';
+        if ($this.verbose -ne 0) {
+            $outputMessage += ' ({3})';
+        }
+
+        if ($this.exitcode -ne 0 -And $this.spacing -eq 0) {
+            $outputMessage += ' - {4}';
+        }
+
+        Write-IcingaPluginOutput (
+            [string]::Format(
+                $outputMessage,
+                (New-StringTree $this.spacing),
+                $IcingaEnums.IcingaExitCodeText.($this.exitcode),
+                $this.name,
+                $this.GetPackageConfigMessage(),
+                $this.headermsg
+            )
+        );
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'PrintOutputMessages' -Value {
+        [bool]$printAll = $FALSE;
+
+        switch ($this.verbose) {
+            0 {
+                # Default value. Only print a package but not the services include
+                break;
+            };
+            1 {
+                # Include the Operator into the check package result and OK checks of package
+                break;
+            };
+            Default {
+                $printAll = $TRUE;
+                break;
+            }
+        }
+
+        $this.WritePackageOutputStatus();
+
+        if ($printAll) {
+            $this.WriteAllOutput();
+            $this.PrintNoChecksConfigured();
+        } else {
+            if ([int]$this.exitcode -ne $IcingaEnums.IcingaExitCode.Ok) {
+                $this.WriteCheckErrors();
+                $this.PrintNoChecksConfigured();
+            }
+        }
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'AddUniqueSortedChecksToHeader' -Value {
+        param($checkarray, $state);
+
+        [hashtable]$CheckHash = @{};
+
+        foreach ($entry in $checkarray) {
+            if ($CheckHash.ContainsKey($entry) -eq $FALSE) {
+                $CheckHash.Add($entry, $TRUE);
+            }
+        }
+
+        [array]$SortedCheckArray = $CheckHash.GetEnumerator() | Sort-Object name;
+
+        if ($SortedCheckArray.Count -ne 0) {
+            $this.headermsg += [string]::Format(
+                '{0} {1} ',
+                $IcingaEnums.IcingaExitCodeText[$state],
+                [string]::Join(', ', $SortedCheckArray.Key)
+            );
+        }
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'GetWorstExitCode' -Value {
+        if ([int]$this.exitcode -eq [int]$IcingaEnums.IcingaExitCode.Unknown) {
+            return;
+        }
+
+        foreach ($check in $this.checks) {
+            if ([int]$this.exitcode -lt $check.exitcode) {
+                $this.exitcode = $check.exitcode;
+            }
+
+            $this.criticalchecks += $check.GetCriticals();
+            $this.warningchecks  += $check.GetWarnings();
+            $this.unknownchecks  += $check.GetUnknowns();
+        }
+
+        # Only apply this to our top package
+        if ($this.spacing -ne 0) {
+            return;
+        }
+
+        $this.AddUniqueSortedChecksToHeader(
+            $this.criticalchecks, $IcingaEnums.IcingaExitCode.Critical
+        );
+        $this.AddUniqueSortedChecksToHeader(
+            $this.warningchecks, $IcingaEnums.IcingaExitCode.Warning
+        );
+        $this.AddUniqueSortedChecksToHeader(
+            $this.unknownchecks, $IcingaEnums.IcingaExitCode.Unknown
+        );
+    }
+
+    $Check | Add-Member -MemberType ScriptMethod -Name 'GetPerfData' -Value {
+        [string]$perfData             = '';
+        [hashtable]$CollectedPerfData = @{};
+
+        # At first lets collect all perf data, but ensure we only add possible label duplication only once
+        foreach ($check in $this.checks) {
+            $data = $check.GetPerfData();
+
+            if ($null -eq $data -Or $null -eq $data.label) {
+                continue;
+            }
+
+            if ($CollectedPerfData.ContainsKey($data.label)) {
+                continue;
+            }
+
+            $CollectedPerfData.Add($data.label, $data);
+        }
+
+        # Now sort the label output by name
+        $SortedArray = $CollectedPerfData.GetEnumerator() | Sort-Object name;
+
+        # Buold the performance data output based on the sorted result
+        foreach ($entry in $SortedArray) {
+            $perfData += $entry.Value;
+        }
+
+        return @{
+            'label'    = $this.name;
+            'perfdata' = $CollectedPerfData;
+            'package'  = $TRUE;
+        }
+    }
+
+    $Check.Initialise();
 
     return $Check;
 }
